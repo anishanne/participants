@@ -6,8 +6,16 @@ import { useAppState } from "@/components/app-state-provider";
 import { SkeletonTimelineRow } from "@/components/skeleton";
 
 import { isTodayPST, parsePST } from "@/lib/config";
-import { lookupStudent, type StudentLookupResult } from "@/lib/csv-lookup";
 import type { ResolvedScheduleSlot } from "@/lib/types";
+
+interface StudentLookupResult {
+  studentName: string;
+  nameAbbreviated: string;
+  teamName: string;
+  teamNumber: string;
+  tests: string;
+  overrides: Record<string, { title?: string; location?: string }>;
+}
 
 function parseTime(timeStr: string, tournamentDate: string): Date {
   const match = timeStr.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
@@ -64,7 +72,9 @@ export function ScheduleView() {
     setLoading(true);
     setLookupError(false);
     try {
-      const result = await lookupStudent(badge);
+      const res = await fetch(`/api/student/${encodeURIComponent(badge)}`);
+      if (!res.ok) { setLookupResult(null); setLookupError(true); return; }
+      const result = await res.json();
       setLookupResult(result);
       setLookupError(!result);
     } catch {
@@ -88,7 +98,7 @@ export function ScheduleView() {
   const showPersonalized = mode === "personalized" && lookupResult !== null;
   const displayedSlots: ResolvedScheduleSlot[] = showPersonalized
     ? generalSchedule.map((slot) => {
-      const override = lookupResult.overrides[slot.id];
+      const override = lookupResult.overrides[slot.slug];
       if (!override) return { ...slot, isPersonalized: false };
       return {
         ...slot,

@@ -47,7 +47,7 @@ export async function POST(request: Request) {
 
     const fromNumber = process.env.TWILIO_PHONE_NUMBER;
 
-    if (client && fromNumber && process.env.TWILIO_VERIFIED === "true") {
+    if (client && fromNumber) {
       try {
         await client.messages.create({
           body: `Your SMT 2026 verification code is: ${code}`,

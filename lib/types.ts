@@ -17,13 +17,6 @@ export interface ScheduleSlot {
   track: string;
 }
 
-export interface StudentSlotOverride {
-  title?: string;
-  location?: string;
-}
-
-export type StudentScheduleOverrides = Record<string, Record<string, StudentSlotOverride>>;
-
 export interface ResolvedScheduleSlot extends ScheduleSlot {
   personalizedTitle?: string;
   personalizedLocation?: string;
@@ -56,10 +49,3 @@ export interface MapLocation {
   x: number;
   y: number;
 }
-
-export interface CsvImportResult {
-  importedStudents: number;
-  matchedColumns: string[];
-  unmatchedColumns: string[];
-}
-

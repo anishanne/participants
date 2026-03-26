@@ -1,9 +1,7 @@
 "use client";
 
-import Papa from "papaparse";
 import {
   createContext,
-  startTransition,
   useCallback,
   useContext,
   useEffect,
@@ -14,13 +12,10 @@ import { TOURNAMENT_DATE } from "@/lib/config";
 import { MAP_LOCATIONS } from "@/lib/demo-data";
 import type {
   Announcement,
-  CsvImportResult,
   MapLocation,
   ParticipantPreferences,
-  ScheduleSlot,
-  StudentScheduleOverrides
+  ScheduleSlot
 } from "@/lib/types";
-import { parseStudentOverrideCsv } from "@/lib/utils";
 
 const PREFS_KEY = "smt-user-prefs";
 
@@ -31,8 +26,6 @@ interface AppStateContextValue {
   addScheduleSlot: () => void;
   removeScheduleSlot: (slotId: string) => void;
   updateScheduleSlot: (slotId: string, patch: Partial<ScheduleSlot>) => void;
-  personalizedOverrides: StudentScheduleOverrides;
-  importOverrideCsv: (csvText: string) => CsvImportResult;
   announcements: Announcement[];
   refreshAnnouncements: () => Promise<void>;
   tournamentDate: string;
@@ -54,7 +47,6 @@ const DEFAULT_PREFERENCES: ParticipantPreferences = {
 export function AppStateProvider({ children }: { children: ReactNode }) {
   const [preferences, setPreferences] = useState(DEFAULT_PREFERENCES);
   const [generalSchedule, setGeneralSchedule] = useState<ScheduleSlot[]>([]);
-  const [personalizedOverrides, setPersonalizedOverrides] = useState<StudentScheduleOverrides>({});
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
   const [dataLoading, setDataLoading] = useState(true);
   const [hydrated, setHydrated] = useState(false);
@@ -171,14 +163,6 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 
   function removeScheduleSlot(slotId: string) {
     setGeneralSchedule((current) => current.filter((slot) => slot.id !== slotId));
-    setPersonalizedOverrides((current) => {
-      const nextEntries = Object.entries(current).map(([studentId, slots]) => {
-        const { [slotId]: removed, ...rest } = slots;
-        void removed;
-        return [studentId, rest] as const;
-      });
-      return Object.fromEntries(nextEntries);
-    });
 
     fetch("/api/admin/schedule", {
       method: "DELETE",
@@ -199,26 +183,6 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     }).catch(() => {});
   }
 
-  function importOverrideCsv(csvText: string) {
-    const parsed = Papa.parse<Record<string, string>>(csvText, {
-      header: true,
-      skipEmptyLines: true
-    });
-
-    const { overrides, summary } = parseStudentOverrideCsv(
-      parsed.data,
-      generalSchedule,
-      personalizedOverrides
-    );
-
-    startTransition(() => {
-      setPersonalizedOverrides(overrides);
-    });
-
-    return summary;
-  }
-
-
   return (
     <AppStateContext.Provider
       value={{
@@ -228,8 +192,6 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
         addScheduleSlot,
         removeScheduleSlot,
         updateScheduleSlot,
-        personalizedOverrides,
-        importOverrideCsv,
         announcements,
         refreshAnnouncements,
         tournamentDate: TOURNAMENT_DATE,
