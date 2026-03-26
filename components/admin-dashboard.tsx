@@ -1,8 +1,8 @@
 "use client";
 
 import ReactMarkdown from "react-markdown";
-import { Megaphone, Plus, SendHorizonal, Trash2, WandSparkles } from "lucide-react";
-import { useDeferredValue, useState } from "react";
+import { AlertTriangle, Check, Loader2, Megaphone, Pencil, Plus, SendHorizonal, Trash2, WandSparkles, X } from "lucide-react";
+import { useCallback, useDeferredValue, useEffect, useState } from "react";
 import { useAppState } from "@/components/app-state-provider";
 import { RoomAssignments } from "@/components/room-assignments";
 
@@ -28,6 +28,7 @@ export function AdminDashboard() {
     pushEnabled: true
   });
   const [publishing, setPublishing] = useState(false);
+  const [sentReloadKey, setSentReloadKey] = useState(0);
   const deferredBody = useDeferredValue(announcement.body);
 
   async function handlePublish(event: React.FormEvent<HTMLFormElement>) {
@@ -52,8 +53,9 @@ export function AdminDashboard() {
         return;
       }
 
-      // Refresh announcements from DB
+      // Refresh both contexts
       await refreshAnnouncements();
+      setSentReloadKey((k) => k + 1);
 
       setAnnouncement((current) => ({
         ...current,
@@ -199,31 +201,7 @@ export function AdminDashboard() {
         </section>
       </section>
 
-      <section className="panel p-5">
-        <div className="flex items-center gap-2">
-          <Megaphone className="h-4 w-4 text-[color:var(--crimson)]" />
-          <div>
-            <p className="eyebrow">Recent Sends</p>
-            <h2 className="section-title mt-1">Sent</h2>
-          </div>
-        </div>
-        <div className="mt-4 space-y-3">
-          {announcements.map((item) => (
-            <article key={item.id} className="rounded-[1.4rem] border border-[color:var(--line)] bg-white/75 px-4 py-4">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <p className="text-sm font-semibold text-[color:var(--ink)]">{item.title}</p>
-                  <p className="mt-1 text-sm text-[color:var(--ink-soft)]">{new Date(item.createdAt).toLocaleString()}</p>
-                </div>
-                <div className="flex flex-wrap justify-end gap-2">
-                  {item.pushEnabled ? <span className="pill">Push</span> : null}
-                  {item.smsEnabled ? <span className="pill">SMS</span> : null}
-                </div>
-              </div>
-            </article>
-          ))}
-        </div>
-      </section>
+      <SentAnnouncements reloadKey={sentReloadKey} />
     </div>
   );
 }
@@ -246,6 +224,162 @@ function Field({
         className="w-full rounded-2xl border border-[color:var(--line)] bg-white/85 px-4 py-3 text-sm text-[color:var(--ink)] outline-none transition focus:border-[color:var(--crimson)]"
       />
     </label>
+  );
+}
+
+/* ---------- Sent announcements with edit ---------- */
+
+interface DbAnnouncement {
+  id: string;
+  title: string;
+  body_markdown: string;
+  created_at: string;
+  author_name: string;
+  push_enabled: boolean;
+  sms_enabled: boolean;
+}
+
+function SentAnnouncements({ reloadKey }: { reloadKey: number }) {
+  const [items, setItems] = useState<DbAnnouncement[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editTitle, setEditTitle] = useState("");
+  const [editBody, setEditBody] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  const load = useCallback(async () => {
+    try {
+      const res = await fetch("/api/admin/announce");
+      if (!res.ok) return;
+      const data = await res.json();
+      setItems(data);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    load();
+  }, [load, reloadKey]);
+
+  function startEdit(item: DbAnnouncement) {
+    setEditingId(item.id);
+    setEditTitle(item.title);
+    setEditBody(item.body_markdown);
+  }
+
+  async function saveEdit() {
+    if (!editingId) return;
+    setSaving(true);
+    try {
+      await fetch("/api/admin/announce", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: editingId, title: editTitle, body: editBody })
+      });
+      await load();
+      setEditingId(null);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  if (loading) {
+    return (
+      <section className="panel p-5">
+        <div className="flex items-center gap-2">
+          <Loader2 className="h-4 w-4 animate-spin text-[color:var(--ink-soft)]" />
+          <p className="text-sm text-[color:var(--ink-soft)]">Loading announcements...</p>
+        </div>
+      </section>
+    );
+  }
+
+  return (
+    <section className="panel p-5">
+      <div className="flex items-center gap-2">
+        <Megaphone className="h-4 w-4 text-[color:var(--crimson)]" />
+        <div>
+          <p className="eyebrow">All Announcements</p>
+          <h2 className="section-title mt-1">Sent</h2>
+        </div>
+      </div>
+
+      <div className="mt-2 flex items-center gap-1.5 rounded-[1rem] border border-amber-200 bg-amber-50/80 px-3 py-2 text-xs text-amber-800">
+        <AlertTriangle className="h-3 w-3 shrink-0" />
+        Editing updates the announcement text. Push notifications already delivered cannot be changed.
+      </div>
+
+      {items.length === 0 ? (
+        <p className="mt-4 text-sm text-[color:var(--ink-soft)]">No announcements yet.</p>
+      ) : (
+        <div className="mt-4 space-y-3">
+          {items.map((item) => {
+            const isEditing = editingId === item.id;
+
+            return (
+              <article key={item.id} className="rounded-[1.4rem] border border-[color:var(--line)] bg-white/75 px-4 py-4">
+                {isEditing ? (
+                  <div className="space-y-3">
+                    <input
+                      value={editTitle}
+                      onChange={(e) => setEditTitle(e.target.value)}
+                      className="w-full rounded-xl border border-[color:var(--line)] bg-white px-3 py-2 text-sm font-semibold text-[color:var(--ink)] outline-none focus:border-[color:var(--crimson)]"
+                    />
+                    <textarea
+                      value={editBody}
+                      onChange={(e) => setEditBody(e.target.value)}
+                      rows={4}
+                      className="w-full rounded-xl border border-[color:var(--line)] bg-white px-3 py-2 text-sm text-[color:var(--ink)] outline-none focus:border-[color:var(--crimson)]"
+                    />
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={saveEdit}
+                        disabled={saving}
+                        className="inline-flex items-center gap-1 rounded-full bg-[color:var(--ink)] px-3 py-1.5 text-xs font-semibold text-white transition hover:brightness-110 disabled:opacity-70"
+                      >
+                        <Check className="h-3 w-3" />
+                        {saving ? "Saving..." : "Save"}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setEditingId(null)}
+                        className="inline-flex items-center gap-1 rounded-full border border-[color:var(--line)] px-3 py-1.5 text-xs font-medium text-[color:var(--ink-soft)]"
+                      >
+                        <X className="h-3 w-3" />
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-semibold text-[color:var(--ink)]">{item.title}</p>
+                      <p className="mt-0.5 text-xs text-[color:var(--ink-soft)] truncate">{item.body_markdown?.slice(0, 80)}</p>
+                      <p className="mt-1 text-xs text-[color:var(--ink-soft)]">
+                        {new Date(item.created_at).toLocaleString()} &middot; {item.author_name}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      {item.push_enabled ? <span className="pill">Push</span> : null}
+                      {item.sms_enabled ? <span className="pill">SMS</span> : null}
+                      <button
+                        type="button"
+                        onClick={() => startEdit(item)}
+                        className="rounded-lg border border-[color:var(--line)] p-1.5 text-[color:var(--ink-soft)] transition hover:bg-white"
+                      >
+                        <Pencil className="h-3 w-3" />
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </article>
+            );
+          })}
+        </div>
+      )}
+    </section>
   );
 }
 

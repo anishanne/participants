@@ -11,6 +11,47 @@ if (vapidPublicKey && vapidPrivateKey) {
   webpush.setVapidDetails(vapidSubject, vapidPublicKey, vapidPrivateKey);
 }
 
+export async function GET() {
+  const session = await getAdminSession();
+  if (!session.user || session.user.status !== "approved") {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
+  }
+
+  const supabase = getSupabase();
+  if (!supabase) return NextResponse.json({ error: "Database not configured" }, { status: 500 });
+
+  const { data, error } = await supabase
+    .from("announcements")
+    .select("*")
+    .order("created_at", { ascending: false });
+
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  return NextResponse.json(data);
+}
+
+export async function PATCH(request: Request) {
+  const session = await getAdminSession();
+  if (!session.user || session.user.status !== "approved") {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
+  }
+
+  const { id, title, body } = await request.json();
+  if (!id) return NextResponse.json({ error: "ID is required" }, { status: 400 });
+
+  const supabase = getSupabase();
+  if (!supabase) return NextResponse.json({ error: "Database not configured" }, { status: 500 });
+
+  const updates: Record<string, unknown> = {};
+  if (title !== undefined) updates.title = title;
+  if (body !== undefined) updates.body_markdown = body;
+
+  const { error } = await supabase.from("announcements").update(updates).eq("id", id);
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  return NextResponse.json({ success: true });
+}
+
 export async function POST(request: Request) {
   const session = await getAdminSession();
   if (!session.user || session.user.status !== "approved") {

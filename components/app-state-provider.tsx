@@ -93,46 +93,42 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     }));
   }, [hydrated, preferences]);
 
-  // Load schedule + announcements from Supabase on mount
+  // Load schedule + announcements from API on mount
   useEffect(() => {
-    async function loadFromDb() {
+    async function loadFromApi() {
       try {
-        const { getSupabaseClient } = await import("@/lib/supabase-client");
-        const supabase = getSupabaseClient();
-        if (!supabase) return;
-
         const [scheduleRes, announcementsRes] = await Promise.all([
-          supabase.from("schedule_slots").select("*").order("sort_order"),
-          supabase.from("announcements").select("*").order("created_at", { ascending: false })
+          fetch("/api/schedule"),
+          fetch("/api/announcements")
         ]);
 
-        if (scheduleRes.data && scheduleRes.data.length > 0) {
-          setGeneralSchedule(scheduleRes.data.map(mapDbSlot));
+        if (scheduleRes.ok) {
+          const data = await scheduleRes.json();
+          if (Array.isArray(data) && data.length > 0) {
+            setGeneralSchedule(data.map(mapDbSlot));
+          }
         }
 
-        if (announcementsRes.data && announcementsRes.data.length > 0) {
-          setAnnouncements(announcementsRes.data.map(mapDbAnnouncement));
+        if (announcementsRes.ok) {
+          const data = await announcementsRes.json();
+          if (Array.isArray(data) && data.length > 0) {
+            setAnnouncements(data.map(mapDbAnnouncement));
+          }
         }
       } catch {
-        // Supabase unavailable — keep defaults
+        // API unavailable — keep defaults
       }
     }
 
-    loadFromDb();
+    loadFromApi();
   }, []);
 
   const refreshAnnouncements = useCallback(async () => {
     try {
-      const { getSupabaseClient } = await import("@/lib/supabase-client");
-      const supabase = getSupabaseClient();
-      if (!supabase) return;
-
-      const { data } = await supabase
-        .from("announcements")
-        .select("*")
-        .order("created_at", { ascending: false });
-
-      if (data && data.length > 0) {
+      const res = await fetch("/api/announcements");
+      if (!res.ok) return;
+      const data = await res.json();
+      if (Array.isArray(data) && data.length > 0) {
         setAnnouncements(data.map(mapDbAnnouncement));
       }
     } catch {}
@@ -156,20 +152,18 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 
     setGeneralSchedule((current) => [...current, newSlot]);
 
-    // Persist to Supabase
-    import("@/lib/supabase-server").then(({ getSupabase }) => {
-      const supabase = getSupabase();
-      if (!supabase) return;
-      supabase.from("schedule_slots").insert({
+    fetch("/api/admin/schedule", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
         slug: newSlot.slug,
-        starts_at: new Date().toISOString(),
         title: newSlot.title,
         location: newSlot.location,
         description: newSlot.description,
         track: newSlot.track,
         sort_order: nextIndex
-      });
-    });
+      })
+    }).catch(() => {});
   }
 
   function removeScheduleSlot(slotId: string) {
@@ -183,11 +177,11 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       return Object.fromEntries(nextEntries);
     });
 
-    import("@/lib/supabase-server").then(({ getSupabase }) => {
-      const supabase = getSupabase();
-      if (!supabase) return;
-      supabase.from("schedule_slots").delete().eq("id", slotId);
-    });
+    fetch("/api/admin/schedule", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: slotId })
+    }).catch(() => {});
   }
 
   function updateScheduleSlot(slotId: string, patch: Partial<ScheduleSlot>) {
@@ -195,11 +189,11 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       current.map((slot) => (slot.id === slotId ? { ...slot, ...patch } : slot))
     );
 
-    import("@/lib/supabase-server").then(({ getSupabase }) => {
-      const supabase = getSupabase();
-      if (!supabase) return;
-      supabase.from("schedule_slots").update(patch).eq("id", slotId);
-    });
+    fetch("/api/admin/schedule", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: slotId, ...patch })
+    }).catch(() => {});
   }
 
   function importOverrideCsv(csvText: string) {
