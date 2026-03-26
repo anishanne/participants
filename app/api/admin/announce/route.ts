@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import webpush from "web-push";
-import { getAdminSession } from "@/lib/admin-session";
+import { getAdminSession, isApprovedAdmin } from "@/lib/admin-session";
 import { getSupabase } from "@/lib/supabase-server";
 
 const vapidPublicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
@@ -12,8 +12,7 @@ if (vapidPublicKey && vapidPrivateKey) {
 }
 
 export async function GET() {
-  const session = await getAdminSession();
-  if (!session.user || session.user.status !== "approved") {
+  if (!await isApprovedAdmin()) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
   }
 
@@ -31,8 +30,7 @@ export async function GET() {
 }
 
 export async function PATCH(request: Request) {
-  const session = await getAdminSession();
-  if (!session.user || session.user.status !== "approved") {
+  if (!await isApprovedAdmin()) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
   }
 
@@ -53,8 +51,7 @@ export async function PATCH(request: Request) {
 }
 
 export async function POST(request: Request) {
-  const session = await getAdminSession();
-  if (!session.user || session.user.status !== "approved") {
+  if (!await isApprovedAdmin()) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
   }
 
@@ -75,7 +72,7 @@ export async function POST(request: Request) {
       sms_enabled: smsEnabled ?? false,
       push_enabled: pushEnabled ?? true,
       audience_mode: "all",
-      author_name: session.user.displayName || "Admin"
+      author_name: (await getAdminSession()).user?.displayName || "Admin"
     }).select("id").single();
 
     if (error) {

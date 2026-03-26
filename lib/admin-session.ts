@@ -28,3 +28,10 @@ export async function getAdminSession(): Promise<IronSession<AdminSessionData>> 
   const cookieStore = await cookies();
   return getIronSession<AdminSessionData>(cookieStore, SESSION_OPTIONS);
 }
+
+/** Check if user is an approved admin. Returns true in dev mode without checking session. */
+export async function isApprovedAdmin(): Promise<boolean> {
+  if (process.env.NODE_ENV !== "production") return true;
+  const session = await getAdminSession();
+  return Boolean(session.user && session.user.status === "approved");
+}

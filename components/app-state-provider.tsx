@@ -10,6 +10,7 @@ import {
   useState,
   type ReactNode
 } from "react";
+import { TOURNAMENT_DATE } from "@/lib/config";
 import { MAP_LOCATIONS } from "@/lib/demo-data";
 import type {
   Announcement,
@@ -35,6 +36,7 @@ interface AppStateContextValue {
   announcements: Announcement[];
   refreshAnnouncements: () => Promise<void>;
   tournamentDate: string;
+  loading: boolean;
   mapLocations: MapLocation[];
 }
 
@@ -54,7 +56,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
   const [generalSchedule, setGeneralSchedule] = useState<ScheduleSlot[]>([]);
   const [personalizedOverrides, setPersonalizedOverrides] = useState<StudentScheduleOverrides>({});
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
-  const [tournamentDate, setTournamentDate] = useState("2026-04-18T07:00:00-07:00");
+  const [dataLoading, setDataLoading] = useState(true);
   const [hydrated, setHydrated] = useState(false);
 
   // Load user prefs from localStorage (only studentId + dismissals — not shared data)
@@ -95,10 +97,9 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     async function loadFromApi() {
       try {
-        const [scheduleRes, announcementsRes, settingsRes] = await Promise.all([
+        const [scheduleRes, announcementsRes] = await Promise.all([
           fetch("/api/schedule"),
-          fetch("/api/announcements"),
-          fetch("/api/settings")
+          fetch("/api/announcements")
         ]);
 
         if (scheduleRes.ok) {
@@ -115,14 +116,10 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
           }
         }
 
-        if (settingsRes.ok) {
-          const settings = await settingsRes.json();
-          if (settings.tournament_date) {
-            setTournamentDate(settings.tournament_date);
-          }
-        }
       } catch {
         // API unavailable — keep defaults
+      } finally {
+        setDataLoading(false);
       }
     }
 
@@ -235,7 +232,8 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
         importOverrideCsv,
         announcements,
         refreshAnnouncements,
-        tournamentDate,
+        tournamentDate: TOURNAMENT_DATE,
+        loading: dataLoading,
         mapLocations: MAP_LOCATIONS
       }}
     >

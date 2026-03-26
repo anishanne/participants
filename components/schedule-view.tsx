@@ -3,21 +3,23 @@
 import { CalendarRange, Check, ChevronDown, Loader2, MapPin, Radio, Sparkles, User } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { useAppState } from "@/components/app-state-provider";
+import { SkeletonTimelineRow } from "@/components/skeleton";
+
+import { isTodayPST, parsePST } from "@/lib/config";
 import { lookupStudent, type StudentLookupResult } from "@/lib/csv-lookup";
 import type { ResolvedScheduleSlot } from "@/lib/types";
 
 function parseTime(timeStr: string, tournamentDate: string): Date {
-  const base = new Date(tournamentDate);
   const match = timeStr.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
-  if (!match) return base;
+  if (!match) return parsePST(tournamentDate);
   let hours = parseInt(match[1], 10);
   const minutes = parseInt(match[2], 10);
   const period = match[3].toUpperCase();
   if (period === "PM" && hours !== 12) hours += 12;
   if (period === "AM" && hours === 12) hours = 0;
-  const result = new Date(base);
-  result.setHours(hours, minutes, 0, 0);
-  return result;
+  const hh = String(hours).padStart(2, "0");
+  const mm = String(minutes).padStart(2, "0");
+  return parsePST(`${tournamentDate}T${hh}:${mm}:00`);
 }
 
 function getSlotStatus(
@@ -25,9 +27,8 @@ function getSlotStatus(
   nextSlot: { time: string } | null,
   tournamentDate: string
 ): "completed" | "current" | "upcoming" | "none" {
+  if (!tournamentDate || !isTodayPST(tournamentDate)) return "none";
   const now = new Date();
-  const tDay = new Date(tournamentDate);
-  if (now.toDateString() !== tDay.toDateString()) return "none";
 
   const start = parseTime(slot.time, tournamentDate);
   const end = nextSlot
@@ -40,7 +41,7 @@ function getSlotStatus(
 }
 
 export function ScheduleView() {
-  const { generalSchedule, preferences, updatePreferences, tournamentDate } = useAppState();
+  const { generalSchedule, loading: appLoading, preferences, updatePreferences, tournamentDate } = useAppState();
   const [mode, setMode] = useState<"personalized" | "general">("personalized");
   const [lookupResult, setLookupResult] = useState<StudentLookupResult | null>(null);
   const [lookupError, setLookupError] = useState(false);
@@ -87,15 +88,15 @@ export function ScheduleView() {
   const showPersonalized = mode === "personalized" && lookupResult !== null;
   const displayedSlots: ResolvedScheduleSlot[] = showPersonalized
     ? generalSchedule.map((slot) => {
-        const override = lookupResult.overrides[slot.id];
-        if (!override) return { ...slot, isPersonalized: false };
-        return {
-          ...slot,
-          personalizedTitle: override.title,
-          personalizedLocation: override.location,
-          isPersonalized: Boolean(override.title || override.location)
-        };
-      })
+      const override = lookupResult.overrides[slot.id];
+      if (!override) return { ...slot, isPersonalized: false };
+      return {
+        ...slot,
+        personalizedTitle: override.title,
+        personalizedLocation: override.location,
+        isPersonalized: Boolean(override.title || override.location)
+      };
+    })
     : generalSchedule.map((slot) => ({ ...slot, isPersonalized: false }));
 
   return (
@@ -122,18 +123,16 @@ export function ScheduleView() {
               <button
                 type="button"
                 onClick={() => setMode("personalized")}
-                className={`rounded-full px-3 py-1 text-xs font-medium transition ${
-                  showPersonalized ? "bg-[color:var(--ink)] text-white" : "text-[color:var(--ink-soft)]"
-                }`}
+                className={`rounded-full px-3 py-1 text-xs font-medium transition ${showPersonalized ? "bg-[color:var(--ink)] text-white" : "text-[color:var(--ink-soft)]"
+                  }`}
               >
                 My Schedule
               </button>
               <button
                 type="button"
                 onClick={() => setMode("general")}
-                className={`rounded-full px-3 py-1 text-xs font-medium transition ${
-                  !showPersonalized ? "bg-[color:var(--ink)] text-white" : "text-[color:var(--ink-soft)]"
-                }`}
+                className={`rounded-full px-3 py-1 text-xs font-medium transition ${!showPersonalized ? "bg-[color:var(--ink)] text-white" : "text-[color:var(--ink-soft)]"
+                  }`}
               >
                 General
               </button>
@@ -187,6 +186,15 @@ export function ScheduleView() {
       {/* Timeline */}
       <section className="panel px-4 py-3">
         <div className="relative">
+          {appLoading ? (
+            <>
+              {Array.from({ length: 10 }).map((_, i) => (
+                <SkeletonTimelineRow key={i} isLast={i === 5} />
+              ))}
+            </>
+          ) : displayedSlots.length === 0 ? (
+            <p className="py-4 text-center text-sm text-[color:var(--ink-soft)]">No schedule loaded.</p>
+          ) : null}
           {displayedSlots.map((slot, i) => {
             const nextSlot = i + 1 < displayedSlots.length ? displayedSlots[i + 1] : null;
             const status = getSlotStatus(slot, nextSlot, tournamentDate);
@@ -201,21 +209,19 @@ export function ScheduleView() {
             return (
               <div key={slot.id} className="flex gap-3">
                 {/* Time column */}
-                <div className={`w-14 shrink-0 pt-2.5 text-right text-xs font-semibold ${
-                  isCompleted ? "text-[color:var(--ink-soft)]/50 line-through" : isCurrent ? "text-[color:var(--crimson)]" : "text-[color:var(--ink-soft)]"
-                }`}>
+                <div className={`w-14 shrink-0 pt-2.5 text-right text-xs font-semibold ${isCompleted ? "text-[color:var(--ink-soft)]/50 line-through" : isCurrent ? "text-[color:var(--crimson)]" : "text-[color:var(--ink-soft)]"
+                  }`}>
                   {slot.time.replace(":00 ", " ").replace(" AM", "a").replace(" PM", "p")}
                 </div>
 
                 {/* Timeline dot + line */}
                 <div className="flex flex-col items-center">
-                  <div className={`mt-2.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full ${
-                    isCompleted
+                  <div className={`mt-2.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full ${isCompleted
                       ? "bg-emerald-100"
                       : isCurrent
                         ? "bg-[color:var(--crimson)] shadow-[0_0_0_4px_rgba(152,28,29,0.12)]"
                         : "border-2 border-[color:var(--line)] bg-white"
-                  }`}>
+                    }`}>
                     {isCompleted ? (
                       <Check className="h-3 w-3 text-emerald-600" />
                     ) : isCurrent ? (
@@ -225,9 +231,8 @@ export function ScheduleView() {
                     )}
                   </div>
                   {!isLast ? (
-                    <div className={`w-0.5 flex-1 ${
-                      isCompleted ? "bg-emerald-200" : "bg-[color:var(--line)]"
-                    }`} />
+                    <div className={`w-0.5 flex-1 ${isCompleted ? "bg-emerald-200" : "bg-[color:var(--line)]"
+                      }`} />
                   ) : null}
                 </div>
 
@@ -235,16 +240,14 @@ export function ScheduleView() {
                 <button
                   type="button"
                   onClick={() => setExpandedId(isExpanded ? null : slot.id)}
-                  className={`mb-1 flex-1 rounded-xl px-3 py-2 text-left transition ${
-                    isCurrent ? "bg-[rgba(152,28,29,0.04)]" : "hover:bg-white/60"
-                  }`}
+                  className={`mb-1 flex-1 rounded-xl px-3 py-2 text-left transition ${isCurrent ? "bg-[rgba(152,28,29,0.04)]" : "hover:bg-white/60"
+                    }`}
                 >
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2">
-                        <p className={`text-sm font-semibold truncate ${
-                          isCompleted ? "text-[color:var(--ink-soft)]/60" : "text-[color:var(--ink)]"
-                        }`}>
+                        <p className={`text-sm font-semibold truncate ${isCompleted ? "text-[color:var(--ink-soft)]/60" : "text-[color:var(--ink)]"
+                          }`}>
                           {displayTitle}
                         </p>
                         {isCurrent ? (
@@ -263,9 +266,8 @@ export function ScheduleView() {
                         ) : null}
                       </div>
                     </div>
-                    <ChevronDown className={`mt-1 h-3.5 w-3.5 shrink-0 text-[color:var(--ink-soft)] transition ${
-                      isExpanded ? "rotate-180" : ""
-                    }`} />
+                    <ChevronDown className={`mt-1 h-3.5 w-3.5 shrink-0 text-[color:var(--ink-soft)] transition ${isExpanded ? "rotate-180" : ""
+                      }`} />
                   </div>
 
                   {isExpanded ? (

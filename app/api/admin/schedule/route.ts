@@ -1,15 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getAdminSession } from "@/lib/admin-session";
+import { isApprovedAdmin } from "@/lib/admin-session";
 import { getSupabase } from "@/lib/supabase-server";
 
-async function requireAdmin() {
-  const session = await getAdminSession();
-  if (!session.user || session.user.status !== "approved") return null;
-  return session.user;
-}
-
 export async function POST(request: NextRequest) {
-  if (!await requireAdmin()) return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
+  if (!await isApprovedAdmin()) return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
 
   const supabase = getSupabase();
   if (!supabase) return NextResponse.json({ error: "Database not configured" }, { status: 500 });
@@ -32,7 +26,7 @@ export async function POST(request: NextRequest) {
 }
 
 export async function PATCH(request: NextRequest) {
-  if (!await requireAdmin()) return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
+  if (!await isApprovedAdmin()) return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
 
   const supabase = getSupabase();
   if (!supabase) return NextResponse.json({ error: "Database not configured" }, { status: 500 });
@@ -47,7 +41,7 @@ export async function PATCH(request: NextRequest) {
 }
 
 export async function DELETE(request: NextRequest) {
-  if (!await requireAdmin()) return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
+  if (!await isApprovedAdmin()) return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
 
   const supabase = getSupabase();
   if (!supabase) return NextResponse.json({ error: "Database not configured" }, { status: 500 });

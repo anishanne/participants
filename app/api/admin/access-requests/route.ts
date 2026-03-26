@@ -1,16 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getAdminSession } from "@/lib/admin-session";
+import { getAdminSession, isApprovedAdmin } from "@/lib/admin-session";
 import { getSupabase } from "@/lib/supabase-server";
 
-async function requireApprovedAdmin() {
-  const session = await getAdminSession();
-  if (!session.user || session.user.status !== "approved") return null;
-  return session.user;
-}
-
 export async function GET() {
-  const admin = await requireApprovedAdmin();
-  if (!admin) return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
+  if (!await isApprovedAdmin()) return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
 
   const supabase = getSupabase();
   if (!supabase) return NextResponse.json({ error: "Database not configured" }, { status: 500 });
@@ -26,8 +19,7 @@ export async function GET() {
 }
 
 export async function PATCH(request: NextRequest) {
-  const admin = await requireApprovedAdmin();
-  if (!admin) return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
+  if (!await isApprovedAdmin()) return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
 
   const supabase = getSupabase();
   if (!supabase) return NextResponse.json({ error: "Database not configured" }, { status: 500 });
@@ -40,7 +32,7 @@ export async function PATCH(request: NextRequest) {
 
   const { error } = await supabase
     .from("admin_users")
-    .update({ status: newStatus, approved_by: admin.uid })
+    .update({ status: newStatus, approved_by: (await getAdminSession()).user?.uid ?? "dev" })
     .eq("stanford_uid", stanford_uid);
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });

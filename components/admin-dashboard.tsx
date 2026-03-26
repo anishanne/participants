@@ -5,6 +5,7 @@ import { AlertTriangle, Check, Loader2, Megaphone, Pencil, Plus, SendHorizonal, 
 import { useCallback, useDeferredValue, useEffect, useState } from "react";
 import { useAppState } from "@/components/app-state-provider";
 import { RoomAssignments } from "@/components/room-assignments";
+import { SkeletonScheduleSlot } from "@/components/skeleton";
 
 const defaultAnnouncementBody = `## Tournament update
 
@@ -17,6 +18,7 @@ export function AdminDashboard() {
     addScheduleSlot,
     announcements,
     generalSchedule,
+    loading: appLoading,
     refreshAnnouncements,
     removeScheduleSlot,
     updateScheduleSlot
@@ -76,7 +78,6 @@ export function AdminDashboard() {
         </div>
       </section>
 
-      <TournamentDateSetting />
 
       <section className="panel p-5">
         <div className="flex items-start justify-between gap-4">
@@ -94,6 +95,11 @@ export function AdminDashboard() {
           </button>
         </div>
         <div className="mt-4 space-y-4">
+          {appLoading ? (
+            Array.from({ length: 3 }).map((_, i) => (
+              <SkeletonScheduleSlot key={i} />
+            ))
+          ) : null}
           {generalSchedule.map((slot) => (
             <article key={slot.id} className="rounded-[1.5rem] border border-[color:var(--line)] bg-white/75 p-4">
               <div className="grid gap-3 grid-cols-2 lg:grid-cols-3">
@@ -226,87 +232,6 @@ function Field({
         className="w-full rounded-2xl border border-[color:var(--line)] bg-white/85 px-4 py-3 text-sm text-[color:var(--ink)] outline-none transition focus:border-[color:var(--crimson)]"
       />
     </label>
-  );
-}
-
-/* ---------- Tournament date setting ---------- */
-
-function TournamentDateSetting() {
-  const { tournamentDate } = useAppState();
-  const [date, setDate] = useState("");
-  const [time, setTime] = useState("");
-  const [saving, setSaving] = useState(false);
-  const [saved, setSaved] = useState(false);
-
-  useEffect(() => {
-    // Parse the ISO date into local date/time inputs (force PST display)
-    const d = new Date(tournamentDate);
-    const pst = new Date(d.toLocaleString("en-US", { timeZone: "America/Los_Angeles" }));
-    const yyyy = pst.getFullYear();
-    const mm = String(pst.getMonth() + 1).padStart(2, "0");
-    const dd = String(pst.getDate()).padStart(2, "0");
-    const hh = String(pst.getHours()).padStart(2, "0");
-    const min = String(pst.getMinutes()).padStart(2, "0");
-    setDate(`${yyyy}-${mm}-${dd}`);
-    setTime(`${hh}:${min}`);
-  }, [tournamentDate]);
-
-  async function save() {
-    setSaving(true);
-    try {
-      // Build ISO string in PST (UTC-7)
-      const isoDate = `${date}T${time}:00-07:00`;
-      await fetch("/api/admin/settings", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ tournament_date: isoDate })
-      });
-      setSaved(true);
-      setTimeout(() => setSaved(false), 2000);
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  return (
-    <section className="panel p-4">
-      <div className="flex items-center justify-between gap-4">
-        <div className="flex items-center gap-3">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[color:var(--ink-soft)]">Tournament Date</p>
-            <div className="mt-1 flex items-center gap-2">
-              <input
-                type="date"
-                value={date}
-                onChange={(e) => setDate(e.target.value)}
-                className="rounded-lg border border-[color:var(--line)] bg-white/85 px-2 py-1.5 text-sm text-[color:var(--ink)] outline-none focus:border-[color:var(--crimson)]"
-              />
-              <input
-                type="time"
-                value={time}
-                onChange={(e) => setTime(e.target.value)}
-                className="rounded-lg border border-[color:var(--line)] bg-white/85 px-2 py-1.5 text-sm text-[color:var(--ink)] outline-none focus:border-[color:var(--crimson)]"
-              />
-              <span className="text-xs text-[color:var(--ink-soft)]">PST</span>
-            </div>
-          </div>
-        </div>
-        <button
-          type="button"
-          onClick={save}
-          disabled={saving}
-          className="inline-flex items-center gap-1 rounded-full bg-[color:var(--ink)] px-3 py-1.5 text-xs font-semibold text-white transition hover:brightness-110 disabled:opacity-70"
-        >
-          {saved ? (
-            <><Check className="h-3 w-3" /> Saved</>
-          ) : saving ? (
-            "Saving..."
-          ) : (
-            "Save"
-          )}
-        </button>
-      </div>
-    </section>
   );
 }
 

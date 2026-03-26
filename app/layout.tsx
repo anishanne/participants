@@ -42,6 +42,10 @@ export const metadata: Metadata = {
     capable: true,
     statusBarStyle: "black-translucent",
     title: "SMT 2026"
+  },
+  icons: {
+    icon: "/icon.png",
+    apple: "/apple-icon.png"
   }
 };
 

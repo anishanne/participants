@@ -17,6 +17,8 @@ import {
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useAppState } from "@/components/app-state-provider";
+import { SkeletonAnnouncementCard, SkeletonEventCard } from "@/components/skeleton";
+import { isTodayPST, parsePST } from "@/lib/config";
 import type { ScheduleSlot } from "@/lib/types";
 import { formatDisplayPhone, formatPhone } from "@/lib/utils";
 
@@ -44,8 +46,9 @@ const quickLinks = [
 /* ---------- Time helpers ---------- */
 
 function getTimeLeft(targetDate: string) {
-  const total = new Date(targetDate).getTime() - Date.now();
-  if (total <= 0) return { total: 0, days: 0, hours: 0, minutes: 0, seconds: 0 };
+  if (!targetDate) return { total: 0, days: 0, hours: 0, minutes: 0, seconds: 0 };
+  const total = parsePST(targetDate).getTime() - Date.now();
+  if (!total || total <= 0) return { total: 0, days: 0, hours: 0, minutes: 0, seconds: 0 };
   return {
     total,
     days: Math.floor(total / (1000 * 60 * 60 * 24)),
@@ -56,17 +59,16 @@ function getTimeLeft(targetDate: string) {
 }
 
 function parseScheduleTime(timeStr: string, tournamentDate: string): Date {
-  const base = new Date(tournamentDate);
   const match = timeStr.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
-  if (!match) return base;
+  if (!match) return parsePST(tournamentDate);
   let hours = parseInt(match[1], 10);
   const minutes = parseInt(match[2], 10);
   const period = match[3].toUpperCase();
   if (period === "PM" && hours !== 12) hours += 12;
   if (period === "AM" && hours === 12) hours = 0;
-  const result = new Date(base);
-  result.setHours(hours, minutes, 0, 0);
-  return result;
+  const hh = String(hours).padStart(2, "0");
+  const mm = String(minutes).padStart(2, "0");
+  return parsePST(`${tournamentDate}T${hh}:${mm}:00`);
 }
 
 type EventStatus =
@@ -77,16 +79,20 @@ type EventStatus =
   | { mode: "finished" };
 
 function getEventStatus(schedule: ScheduleSlot[], tournamentDate: string): EventStatus {
-  const now = new Date();
-  const tDay = new Date(tournamentDate);
+  if (!tournamentDate) return { mode: "countdown" as const };
 
-  if (now.toDateString() !== tDay.toDateString()) {
+  const now = new Date();
+
+  if (!isTodayPST(tournamentDate)) {
+    const tDay = parsePST(tournamentDate);
     if (now < tDay && schedule.length > 0) return { mode: "preview", firstSlot: schedule[0] };
     if (now > tDay) return { mode: "finished" };
     return { mode: "countdown" };
   }
 
   // Tournament day — find current/next
+  if (schedule.length === 0) return { mode: "countdown" };
+
   for (let i = 0; i < schedule.length; i++) {
     const slotStart = parseScheduleTime(schedule[i].time, tournamentDate);
     const slotEnd = i + 1 < schedule.length
@@ -112,7 +118,7 @@ function getEventStatus(schedule: ScheduleSlot[], tournamentDate: string): Event
 /* ---------- Main component ---------- */
 
 export function HomeOverview() {
-  const { announcements, generalSchedule, preferences, updatePreferences, tournamentDate } = useAppState();
+  const { announcements, generalSchedule, loading, preferences, updatePreferences, tournamentDate } = useAppState();
 
   const smsEnabled = process.env.NEXT_PUBLIC_SMS_ENABLED === "true";
 
@@ -152,7 +158,7 @@ export function HomeOverview() {
           <div>
             <h1 className="text-2xl font-semibold tracking-tight">Stanford Math Tournament</h1>
             <p className="mt-1 text-sm text-white/74">
-              April 18, 2026 &middot; Stanford University
+              {formatTournamentDate(tournamentDate, { month: "long", day: "numeric", year: "numeric" })} &middot; Stanford University
             </p>
           </div>
           <Countdown targetDate={tournamentDate} />
@@ -170,10 +176,16 @@ export function HomeOverview() {
       {!setupDone ? <SetupChecklist /> : null}
 
       {/* Event status: Happening Now / Up Next / Preview */}
-      <EventStatusCard status={eventStatus} />
+      {loading ? (
+        <SkeletonEventCard />
+      ) : (
+        <EventStatusCard status={eventStatus} tournamentDate={tournamentDate} />
+      )}
 
       {/* Latest announcement */}
-      {latestAnnouncement ? (
+      {loading ? (
+        <SkeletonAnnouncementCard />
+      ) : latestAnnouncement ? (
         <section className="panel p-5">
           <div className="space-y-3">
             <div className="flex items-center justify-between">
@@ -273,7 +285,11 @@ function CountdownUnit({ label, value }: { label: string; value: number }) {
 
 /* ---------- Event status card ---------- */
 
-function EventStatusCard({ status }: { status: EventStatus }) {
+function formatTournamentDate(dateStr: string, opts?: Intl.DateTimeFormatOptions) {
+  return parsePST(dateStr).toLocaleDateString("en-US", { timeZone: "America/Los_Angeles", ...opts });
+}
+
+function EventStatusCard({ status, tournamentDate }: { status: EventStatus; tournamentDate: string }) {
   if (status.mode === "countdown") return null;
 
   if (status.mode === "finished") {
@@ -293,7 +309,7 @@ function EventStatusCard({ status }: { status: EventStatus }) {
     return (
       <section className="panel p-5">
         <div className="space-y-3">
-          <p className="eyebrow">Coming Up on April 18</p>
+          <p className="eyebrow">Coming Up on {formatTournamentDate(tournamentDate, { month: "long", day: "numeric" })}</p>
           <h2 className="text-lg font-semibold tracking-tight text-[color:var(--ink)]">
             {status.firstSlot.title}
           </h2>
@@ -415,7 +431,7 @@ function StatusPill({ done, label }: { done: boolean; label: string }) {
 /* ---------- Setup checklist ---------- */
 
 function SetupChecklist() {
-  const { preferences, updatePreferences } = useAppState();
+  const { preferences, tournamentDate, updatePreferences } = useAppState();
   const [installEvent, setInstallEvent] = useState<BeforeInstallPromptEvent | null>(null);
   const [isIos, setIsIos] = useState(false);
   const [isStandalone, setIsStandalone] = useState(false);
@@ -585,7 +601,7 @@ function SetupChecklist() {
           <div>
             <p className="eyebrow">Setup</p>
             <h2 className="mt-1 text-lg font-semibold tracking-tight">
-              Get ready for tournament day
+              {isTodayPST(tournamentDate) ? "Stay up to date today!" : "Get ready for tournament day"}
             </h2>
           </div>
           <span className="pill">{completedSteps}/{totalSteps}</span>

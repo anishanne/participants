@@ -3,9 +3,10 @@
 import ReactMarkdown from "react-markdown";
 import { BellRing } from "lucide-react";
 import { useAppState } from "@/components/app-state-provider";
+import { SkeletonAnnouncementCard } from "@/components/skeleton";
 
 export function AnnouncementsFeed() {
-  const { announcements } = useAppState();
+  const { announcements, loading } = useAppState();
 
   return (
     <div className="space-y-5">
@@ -21,7 +22,12 @@ export function AnnouncementsFeed() {
         </div>
       </section>
 
-      {announcements.length === 0 ? (
+      {loading ? (
+        <section className="space-y-3">
+          <SkeletonAnnouncementCard />
+          <SkeletonAnnouncementCard />
+        </section>
+      ) : announcements.length === 0 ? (
         <section className="panel-muted p-5 text-center space-y-2">
           <p className="text-sm text-[color:var(--ink-soft)]">No announcements yet. Check back closer to tournament day.</p>
           <a href="mailto:info@stanfordmathtournament.org" className="text-xs text-[color:var(--ink-soft)] hover:underline">

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import webpush from "web-push";
-import { getAdminSession } from "@/lib/admin-session";
+import { isApprovedAdmin } from "@/lib/admin-session";
 import { getSupabase } from "@/lib/supabase-server";
 
 const vapidPublicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
@@ -12,8 +12,7 @@ if (vapidPublicKey && vapidPrivateKey) {
 }
 
 export async function POST(request: Request) {
-  const session = await getAdminSession();
-  if (!session.user || session.user.status !== "approved") {
+  if (!await isApprovedAdmin()) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
   }
 

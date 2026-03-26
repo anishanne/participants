@@ -8,6 +8,11 @@ export const config = {
 };
 
 export async function middleware(request: NextRequest) {
+  // Skip auth in development
+  if (process.env.NODE_ENV !== "production") {
+    return NextResponse.next();
+  }
+
   const response = NextResponse.next();
   const session = await getIronSession<AdminSessionData>(request, response, SESSION_OPTIONS);
   const user = session.user;
