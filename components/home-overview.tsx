@@ -419,12 +419,14 @@ function SetupChecklist() {
   const { preferences, updatePreferences } = useAppState();
   const [installEvent, setInstallEvent] = useState<BeforeInstallPromptEvent | null>(null);
   const [isIos, setIsIos] = useState(false);
+  const [isStandalone, setIsStandalone] = useState(false);
   const [notifPermission, setNotifPermission] = useState<NotificationPermission | "unsupported">(
     "default"
   );
   const [notifRequesting, setNotifRequesting] = useState(false);
 
   // Phone verification state
+  const smsEnabled = process.env.NEXT_PUBLIC_SMS_ENABLED === "true";
   const [showPhoneFlow, setShowPhoneFlow] = useState(false);
   const [phoneNumber, setPhoneNumber] = useState(preferences.phoneNumber);
   const [verificationId, setVerificationId] = useState("");
@@ -442,11 +444,13 @@ function SetupChecklist() {
   useEffect(() => {
     setIsIos(/iphone|ipad|ipod/i.test(window.navigator.userAgent));
 
-    const installed =
+    const standalone =
       window.matchMedia("(display-mode: standalone)").matches ||
       Boolean(window.navigator.standalone);
 
-    if (installed) {
+    setIsStandalone(standalone);
+
+    if (standalone) {
       updatePreferencesRef.current({ homeScreenPinned: true, installPromptDismissed: false });
     }
 
@@ -476,12 +480,12 @@ function SetupChecklist() {
     setNotifPermission(Notification.permission);
   }, []);
 
-  const smsEnabled = process.env.NEXT_PUBLIC_SMS_ENABLED === "true";
-  const steps = [
-    preferences.homeScreenPinned,
-    preferences.notificationsEnabled,
-    ...(smsEnabled ? [preferences.phoneVerified] : [])
-  ];
+  // Step completion
+  const step1Done = preferences.homeScreenPinned; // Added to home screen
+  const step2Done = isStandalone; // Opened from home screen
+  const step3Done = preferences.notificationsEnabled; // Push enabled
+
+  const steps = [step1Done, step2Done, step3Done, ...(smsEnabled ? [preferences.phoneVerified] : [])];
   const completedSteps = steps.filter(Boolean).length;
   const totalSteps = steps.length;
 
@@ -572,20 +576,13 @@ function SetupChecklist() {
           <span className="pill">{completedSteps}/{totalSteps}</span>
         </div>
 
+        {/* Step 1: Add to home screen */}
         <SetupStepRow
-          done={preferences.homeScreenPinned}
+          done={step1Done}
           label="Add to home screen"
-          detail={
-            preferences.homeScreenPinned ? (
-              "App is pinned"
-            ) : isIos && !installEvent ? (
-              <span className="inline-flex items-center gap-1 text-xs text-[color:var(--ink-soft)]">
-                <Share2 className="h-3 w-3" /> Tap Share then Add to Home Screen
-              </span>
-            ) : null
-          }
+          detail={step1Done ? "Added" : null}
           action={
-            !preferences.homeScreenPinned && installEvent ? (
+            !step1Done && installEvent ? (
               <button
                 type="button"
                 onClick={handleInstall}
@@ -598,22 +595,74 @@ function SetupChecklist() {
           }
         />
 
+        {/* iOS/Android-specific instructions for step 1 */}
+        {!step1Done && !installEvent ? (
+          <div className="rounded-[1.2rem] border border-[color:var(--line)] bg-white/60 px-4 py-3 text-xs text-[color:var(--ink-soft)] space-y-2">
+            {isIos ? (
+              <>
+                <p className="font-semibold text-[color:var(--ink)]">How to add on iPhone/iPad:</p>
+                <ol className="list-decimal pl-4 space-y-1">
+                  <li>Tap the <span className="inline-flex items-center gap-0.5 font-medium text-[color:var(--ink)]"><Share2 className="inline h-3 w-3" /> Share</span> button in Safari</li>
+                  <li>Scroll down and tap <strong className="text-[color:var(--ink)]">Add to Home Screen</strong></li>
+                  <li>Tap <strong className="text-[color:var(--ink)]">Add</strong> in the top right</li>
+                </ol>
+              </>
+            ) : (
+              <>
+                <p className="font-semibold text-[color:var(--ink)]">How to add on Android:</p>
+                <ol className="list-decimal pl-4 space-y-1">
+                  <li>Tap the <strong className="text-[color:var(--ink)]">&#8942;</strong> menu in Chrome (top right)</li>
+                  <li>Tap <strong className="text-[color:var(--ink)]">Add to Home screen</strong></li>
+                  <li>Tap <strong className="text-[color:var(--ink)]">Install</strong></li>
+                </ol>
+              </>
+            )}
+          </div>
+        ) : null}
+
+        {/* Step 2: Open from home screen */}
         <SetupStepRow
-          done={preferences.notificationsEnabled}
+          done={step2Done}
+          label="Open from home screen"
+          detail={step2Done ? "Running as app" : !step1Done ? "Complete step 1 first" : null}
+          action={null}
+        />
+
+        {/* Guidance for step 2 when step 1 is done but not yet opened from home */}
+        {step1Done && !step2Done ? (
+          <div className="rounded-[1.2rem] border border-[color:var(--line)] bg-white/60 px-4 py-3 text-xs text-[color:var(--ink-soft)] space-y-2">
+            <p className="font-semibold text-[color:var(--ink)]">Almost there!</p>
+            {isIos ? (
+              <ol className="list-decimal pl-4 space-y-1">
+                <li>Press the <strong className="text-[color:var(--ink)]">Home button</strong> or swipe up to go home</li>
+                <li>Find the <strong className="text-[color:var(--ink)]">SMT 2026</strong> icon on your home screen</li>
+                <li>Tap it to open the app</li>
+              </ol>
+            ) : (
+              <ol className="list-decimal pl-4 space-y-1">
+                <li>Close this browser tab</li>
+                <li>Find <strong className="text-[color:var(--ink)]">SMT 2026</strong> on your home screen or app drawer</li>
+                <li>Tap it to open the app</li>
+              </ol>
+            )}
+          </div>
+        ) : null}
+
+        {/* Step 3: Enable push (locked until step 2) */}
+        <SetupStepRow
+          done={step3Done}
           label="Enable push alerts"
           detail={
-            preferences.notificationsEnabled
+            step3Done
               ? "Notifications on"
-              : notifPermission === "denied"
-                ? "Blocked in browser settings"
-                : notifPermission === "unsupported"
-                  ? "Add to home screen first"
-                  : null
+              : !step2Done
+                ? "Open from home screen first"
+                : notifPermission === "denied"
+                  ? "Blocked — open Settings and re-enable notifications for SMT 2026"
+                  : "Tap Enable to receive live tournament updates"
           }
           action={
-            !preferences.notificationsEnabled &&
-            notifPermission !== "denied" &&
-            notifPermission !== "unsupported" ? (
+            step2Done && !step3Done && notifPermission !== "denied" ? (
               <button
                 type="button"
                 onClick={requestNotifications}
@@ -728,11 +777,10 @@ function SetupStepRow({
   return (
     <div className="flex items-center gap-3 rounded-[1.2rem] border border-[color:var(--line)] bg-white/60 px-4 py-3">
       <div
-        className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full ${
-          done
+        className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full ${done
             ? "bg-emerald-100 text-emerald-600"
             : "border border-[color:var(--line)] text-[color:var(--ink-soft)]"
-        }`}
+          }`}
       >
         {done ? <Check className="h-3.5 w-3.5" /> : <Circle className="h-3 w-3" />}
       </div>
@@ -767,7 +815,7 @@ function PushPillWithTest() {
       });
       setSent(true);
       setTimeout(() => setSent(false), 3000);
-    } catch {}
+    } catch { }
   }
 
   return (
