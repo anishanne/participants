@@ -5,7 +5,6 @@ import Link from "next/link";
 import ReactMarkdown from "react-markdown";
 import {
   Bell,
-  BellRing,
   CalendarClock,
   Check,
   Circle,
@@ -161,10 +160,9 @@ export function HomeOverview() {
           <div className="space-y-2">
             <div className="flex flex-wrap gap-2">
               <StatusPill done={preferences.homeScreenPinned} label={preferences.homeScreenPinned ? "Pinned to Home" : "Not pinned"} />
-              <StatusPill done={preferences.notificationsEnabled} label={preferences.notificationsEnabled ? "Push Activated" : "Push pending"} />
+              {preferences.notificationsEnabled ? <PushPillWithTest /> : <StatusPill done={false} label="Push pending" />}
               {smsEnabled ? <StatusPill done={preferences.phoneVerified} label={preferences.phoneVerified ? "SMS Verified" : "SMS pending"} /> : null}
             </div>
-            {preferences.notificationsEnabled ? <TestPushPill /> : null}
           </div>
         </div>
       </section>
@@ -743,40 +741,35 @@ function SetupStepRow({
   );
 }
 
-/* ---------- Test push pill ---------- */
+/* ---------- Push pill with secret test ---------- */
 
-function TestPushPill() {
-  const [state, setState] = useState<"idle" | "sending" | "sent" | "error">("idle");
+function PushPillWithTest() {
+  const [sent, setSent] = useState(false);
 
-  async function sendTest() {
-    setState("sending");
+  async function handleTap() {
+    if (sent) return;
     try {
       const registration = await navigator.serviceWorker.ready;
       await registration.showNotification("SMT 2026", {
         body: "Push notifications are working!",
         icon: "/icon.png",
         badge: "/icon.png",
-        tag: "smt-test"
+        tag: "smt-test",
+        data: { url: "/announcements" }
       });
-      setState("sent");
-      setTimeout(() => setState("idle"), 3000);
-    } catch {
-      setState("error");
-      setTimeout(() => setState("idle"), 3000);
-    }
+      setSent(true);
+      setTimeout(() => setSent(false), 3000);
+    } catch {}
   }
-
-  const label = state === "sent" ? "Sent!" : state === "error" ? "Failed" : "Test push";
 
   return (
     <button
       type="button"
-      onClick={sendTest}
-      disabled={state === "sending"}
-      className="inline-flex items-center gap-1.5 rounded-full border border-white/15 bg-white/10 px-3 py-1 text-xs font-medium text-white transition hover:bg-white/20 disabled:opacity-70"
+      onClick={handleTap}
+      className="pill border-white/15 bg-white/10 text-white transition hover:bg-white/20"
     >
-      {state === "sent" ? <Check className="h-3 w-3" /> : <BellRing className="h-3 w-3" />}
-      {label}
+      <span className={`h-1.5 w-1.5 rounded-full ${sent ? "bg-white" : "bg-emerald-400"}`} />
+      {sent ? "Test notification sent!" : "Push Activated"}
     </button>
   );
 }
