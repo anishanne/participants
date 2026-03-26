@@ -12,7 +12,7 @@ export interface AdminSessionData {
   user?: AdminSessionUser;
 }
 
-const sessionOptions = {
+export const SESSION_OPTIONS = {
   password:
     process.env.SESSION_SECRET || "dev-secret-change-me-in-production-1234",
   cookieName: "smt-admin-session",
@@ -20,11 +20,11 @@ const sessionOptions = {
     secure: process.env.NODE_ENV === "production" && !process.env.NEXT_PUBLIC_BASE_URL?.includes("localhost"),
     httpOnly: true,
     sameSite: "lax" as const,
-    maxAge: 60 * 60 * 8, // 8 hours
+    maxAge: 60 * 60 * 8,
   },
 };
 
 export async function getAdminSession(): Promise<IronSession<AdminSessionData>> {
   const cookieStore = await cookies();
-  return getIronSession<AdminSessionData>(cookieStore, sessionOptions);
+  return getIronSession<AdminSessionData>(cookieStore, SESSION_OPTIONS);
 }

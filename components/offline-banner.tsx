@@ -70,7 +70,7 @@ export function OfflineBanner() {
 
   if (showReconnected) {
     return (
-      <div className="fixed left-1/2 top-4 z-50 -translate-x-1/2 animate-fade-in rounded-2xl border border-emerald-200 bg-emerald-50/95 px-5 py-3 shadow-lift backdrop-blur">
+      <div className="fixed left-1/2 top-[max(1rem,env(safe-area-inset-top))] z-50 -translate-x-1/2 animate-fade-in rounded-2xl border border-emerald-200 bg-emerald-50/95 px-5 py-3 shadow-lift backdrop-blur">
         <p className="text-sm font-medium text-emerald-800">Back online</p>
       </div>
     );
@@ -79,7 +79,7 @@ export function OfflineBanner() {
   if (online) return null;
 
   return (
-    <div className="fixed left-1/2 top-4 z-50 w-[calc(100%-2rem)] max-w-sm -translate-x-1/2 rounded-2xl border border-[rgba(152,28,29,0.2)] bg-[rgba(255,251,240,0.97)] px-5 py-4 shadow-lift backdrop-blur">
+    <div className="fixed left-1/2 top-[max(1rem,env(safe-area-inset-top))] z-50 w-[calc(100%-2rem)] max-w-sm -translate-x-1/2 rounded-2xl border border-[rgba(152,28,29,0.2)] bg-[rgba(255,251,240,0.97)] px-5 py-4 shadow-lift backdrop-blur">
       <div className="flex items-start gap-3">
         <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[rgba(152,28,29,0.1)]">
           <WifiOff className="h-4.5 w-4.5 text-[color:var(--crimson)]" />

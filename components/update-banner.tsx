@@ -1,12 +1,23 @@
 "use client";
 
 import { RefreshCw } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 const CHECK_INTERVAL = 30_000; // 30 seconds
 
 export function UpdateBanner() {
   const [updateAvailable, setUpdateAvailable] = useState(false);
+
+  const doRefresh = useCallback(() => {
+    if ("serviceWorker" in navigator) {
+      navigator.serviceWorker.getRegistrations().then((registrations) => {
+        for (const registration of registrations) {
+          registration.unregister();
+        }
+      });
+    }
+    window.location.reload();
+  }, []);
 
   useEffect(() => {
     let initialBuildId: string | null = null;
@@ -23,6 +34,11 @@ export function UpdateBanner() {
         }
 
         if (buildId !== initialBuildId) {
+          // If page is hidden/not focused, auto-refresh silently
+          if (document.hidden) {
+            doRefresh();
+            return;
+          }
           setUpdateAvailable(true);
         }
       } catch {
@@ -32,25 +48,26 @@ export function UpdateBanner() {
 
     checkForUpdate();
     const interval = setInterval(checkForUpdate, CHECK_INTERVAL);
-    return () => clearInterval(interval);
-  }, []);
+
+    // Also auto-refresh when user returns to a stale tab
+    function handleVisibilityChange() {
+      if (!document.hidden && updateAvailable) {
+        doRefresh();
+      }
+    }
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [doRefresh, updateAvailable]);
 
   if (!updateAvailable) return null;
 
-  function handleRefresh() {
-    // Unregister service worker so stale cache doesn't persist
-    if ("serviceWorker" in navigator) {
-      navigator.serviceWorker.getRegistrations().then((registrations) => {
-        for (const registration of registrations) {
-          registration.unregister();
-        }
-      });
-    }
-    window.location.reload();
-  }
-
   return (
-    <div className="fixed left-1/2 top-4 z-50 w-[calc(100%-2rem)] max-w-sm -translate-x-1/2 animate-fade-in rounded-2xl border border-[color:var(--line)] bg-[rgba(255,251,240,0.97)] px-5 py-4 shadow-lift backdrop-blur">
+    <div className="fixed left-1/2 top-[max(1rem,env(safe-area-inset-top))] z-50 w-[calc(100%-2rem)] max-w-sm -translate-x-1/2 animate-fade-in rounded-2xl border border-[color:var(--line)] bg-[rgba(255,251,240,0.97)] px-5 py-4 shadow-lift backdrop-blur">
       <div className="flex items-center gap-3">
         <div className="flex-1 min-w-0">
           <p className="text-sm font-semibold text-[color:var(--ink)]">Update available</p>
@@ -58,7 +75,7 @@ export function UpdateBanner() {
         </div>
         <button
           type="button"
-          onClick={handleRefresh}
+          onClick={doRefresh}
           className="inline-flex items-center gap-1.5 rounded-full bg-[color:var(--crimson)] px-4 py-2 text-xs font-semibold text-white transition hover:brightness-105"
         >
           <RefreshCw className="h-3 w-3" />

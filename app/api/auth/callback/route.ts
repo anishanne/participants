@@ -1,21 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
 import { saml, mapSamlAttributes } from "@/lib/saml";
 import { getAdminSession } from "@/lib/admin-session";
-
-const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000";
+import { getSupabase } from "@/lib/supabase-server";
 
 const INITIAL_ADMIN_UIDS = (process.env.INITIAL_ADMIN_UIDS || "")
   .split(",")
   .map((uid) => uid.trim().toLowerCase())
   .filter(Boolean);
-
-function getSupabaseServiceClient() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-  if (!url || !key) return null;
-  return createClient(url, key);
-}
 
 export async function POST(request: NextRequest) {
   try {
@@ -42,7 +33,7 @@ export async function POST(request: NextRequest) {
     const isInitialAdmin = INITIAL_ADMIN_UIDS.includes(attrs.uid.toLowerCase());
 
     // Upsert into admin_users
-    const supabase = getSupabaseServiceClient();
+    const supabase = getSupabase();
     let status: "pending" | "approved" | "denied" = "pending";
 
     if (supabase) {

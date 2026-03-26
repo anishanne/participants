@@ -158,10 +158,12 @@ export function HomeOverview() {
             </p>
           </div>
           <Countdown targetDate={TOURNAMENT_DATE} />
-          <div className="flex flex-wrap items-center gap-2">
-            <StatusPill done={preferences.homeScreenPinned} label="Home screen" />
-            <StatusPill done={preferences.notificationsEnabled} label="Push" />
-            {smsEnabled ? <StatusPill done={preferences.phoneVerified} label="SMS" /> : null}
+          <div className="space-y-2">
+            <div className="flex flex-wrap gap-2">
+              <StatusPill done={preferences.homeScreenPinned} label="Home screen" />
+              <StatusPill done={preferences.notificationsEnabled} label="Push" />
+              {smsEnabled ? <StatusPill done={preferences.phoneVerified} label="SMS" /> : null}
+            </div>
             {preferences.notificationsEnabled ? <TestPushPill /> : null}
           </div>
         </div>

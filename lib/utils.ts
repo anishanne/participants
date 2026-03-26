@@ -1,7 +1,6 @@
 import { clsx, type ClassValue } from "clsx";
 import type {
   CsvImportResult,
-  ResolvedScheduleSlot,
   ScheduleSlot,
   StudentScheduleOverrides
 } from "@/lib/types";
@@ -12,29 +11,6 @@ export function cn(...inputs: ClassValue[]) {
 
 export function normalizeToken(value: string) {
   return value.toLowerCase().replace(/[^a-z0-9]/g, "");
-}
-
-export function mergeScheduleForStudent(
-  studentId: string,
-  schedule: ScheduleSlot[],
-  overrides: StudentScheduleOverrides
-): ResolvedScheduleSlot[] {
-  const studentOverrides = overrides[studentId] ?? {};
-
-  return schedule.map((slot) => {
-    const override = studentOverrides[slot.id];
-
-    if (!override) {
-      return { ...slot, isPersonalized: false };
-    }
-
-    return {
-      ...slot,
-      personalizedTitle: override.title,
-      personalizedLocation: override.location,
-      isPersonalized: Boolean(override.title || override.location)
-    };
-  });
 }
 
 export function formatPhone(value: string) {

@@ -1,12 +1,5 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
-
-function getSupabase() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-  if (!url || !key) return null;
-  return createClient(url, key);
-}
+import { getSupabase } from "@/lib/supabase-server";
 
 export async function POST(request: Request) {
   const subscription = await request.json();
@@ -18,7 +11,6 @@ export async function POST(request: Request) {
   const supabase = getSupabase();
 
   if (supabase) {
-    // Upsert by endpoint to avoid duplicates
     const { error } = await supabase
       .from("push_subscriptions")
       .upsert(

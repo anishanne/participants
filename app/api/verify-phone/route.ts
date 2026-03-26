@@ -1,44 +1,28 @@
 import { NextResponse } from "next/server";
 import twilio from "twilio";
+import { formatDisplayPhone } from "@/lib/utils";
 
-const accountSid = process.env.TWILIO_ACCOUNT_SID;
-const authToken = process.env.TWILIO_AUTH_TOKEN;
-const fromNumber = process.env.TWILIO_PHONE_NUMBER;
+const VERIFICATION_EXPIRY_MS = 10 * 60 * 1000; // 10 minutes
 
-const client = accountSid && authToken ? twilio(accountSid, authToken) : null;
+const client =
+  process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN
+    ? twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN)
+    : null;
 
-// In-memory store for pending verifications (use Redis/DB in scaled deployment)
 const activeVerifications = new Map<
   string,
-  {
-    phoneNumber: string;
-    code: string;
-    createdAt: number;
-  }
+  { phoneNumber: string; code: string; createdAt: number }
 >();
 
-function normalizePhoneNumber(rawValue: string) {
-  const digits = rawValue.replace(/\D/g, "");
-
-  if (digits.length === 10) {
-    return digits;
-  }
-
-  if (digits.length === 11 && digits.startsWith("1")) {
-    return digits.slice(1);
-  }
-
+function normalizePhone(raw: string): string | null {
+  const digits = raw.replace(/\D/g, "");
+  if (digits.length === 10) return digits;
+  if (digits.length === 11 && digits.startsWith("1")) return digits.slice(1);
   return null;
 }
 
-function formatPhoneNumber(rawValue: string) {
-  const normalized = normalizePhoneNumber(rawValue);
-
-  if (!normalized) {
-    return rawValue;
-  }
-
-  return `(${normalized.slice(0, 3)}) ${normalized.slice(3, 6)}-${normalized.slice(6)}`;
+function generateCode(): string {
+  return String(Math.floor(100000 + Math.random() * 900000));
 }
 
 export async function POST(request: Request) {
@@ -47,14 +31,13 @@ export async function POST(request: Request) {
     | { action: "confirm"; verificationId: string; code: string };
 
   if (body.action === "start") {
-    const normalized = normalizePhoneNumber(body.phoneNumber);
-
+    const normalized = normalizePhone(body.phoneNumber);
     if (!normalized) {
       return NextResponse.json({ error: "Enter a valid US mobile number." }, { status: 400 });
     }
 
     const verificationId = crypto.randomUUID();
-    const code = String(Math.floor(100000 + Math.random() * 900000));
+    const code = generateCode();
 
     activeVerifications.set(verificationId, {
       phoneNumber: normalized,
@@ -62,7 +45,8 @@ export async function POST(request: Request) {
       createdAt: Date.now()
     });
 
-    // Send SMS via Twilio (disabled until toll-free verification completes)
+    const fromNumber = process.env.TWILIO_PHONE_NUMBER;
+
     if (client && fromNumber && process.env.TWILIO_VERIFIED === "true") {
       try {
         await client.messages.create({
@@ -78,28 +62,26 @@ export async function POST(request: Request) {
 
       return NextResponse.json({
         verificationId,
-        phoneNumber: formatPhoneNumber(normalized),
+        phoneNumber: formatDisplayPhone(normalized),
         delivery: "sms"
       });
     }
 
-    // Fallback for dev without Twilio configured
     return NextResponse.json({
       verificationId,
-      phoneNumber: formatPhoneNumber(normalized),
+      phoneNumber: formatDisplayPhone(normalized),
       delivery: "simulated",
       previewCode: code
     });
   }
 
-  // Confirm action
   const record = activeVerifications.get(body.verificationId);
 
   if (!record) {
     return NextResponse.json({ error: "Verification expired. Start again." }, { status: 404 });
   }
 
-  if (Date.now() - record.createdAt > 10 * 60 * 1000) {
+  if (Date.now() - record.createdAt > VERIFICATION_EXPIRY_MS) {
     activeVerifications.delete(body.verificationId);
     return NextResponse.json({ error: "Verification expired. Start again." }, { status: 410 });
   }
@@ -112,6 +94,6 @@ export async function POST(request: Request) {
 
   return NextResponse.json({
     verified: true,
-    phoneNumber: formatPhoneNumber(record.phoneNumber)
+    phoneNumber: formatDisplayPhone(record.phoneNumber)
   });
 }
