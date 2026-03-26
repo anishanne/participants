@@ -71,6 +71,11 @@ export async function getStudentLookup(): Promise<Map<string, StudentRecord>> {
   return cache;
 }
 
+export async function getAllStudents(): Promise<StudentRecord[]> {
+  const lookup = await getStudentLookup();
+  return Array.from(lookup.values());
+}
+
 export async function lookupStudent(
   badgeNumber: string
 ): Promise<StudentLookupResult | null> {

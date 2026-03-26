@@ -1,21 +1,10 @@
 import type {
   Announcement,
   MapLocation,
-  ParticipantPreferences,
-  ScheduleSlot,
-  StudentScheduleOverrides
+  ScheduleSlot
 } from "@/lib/types";
 
 export const TOURNAMENT_DATE = "2026-04-18T07:00:00-07:00";
-
-export const DEFAULT_PREFERENCES: ParticipantPreferences = {
-  studentId: "",
-  phoneNumber: "",
-  phoneVerified: false,
-  notificationsEnabled: false,
-  homeScreenPinned: false,
-  installPromptDismissed: false
-};
 
 export const DEFAULT_SCHEDULE: ScheduleSlot[] = [
   {
@@ -109,29 +98,6 @@ export const DEFAULT_SCHEDULE: ScheduleSlot[] = [
     track: "All"
   }
 ];
-
-export const DEFAULT_OVERRIDES: StudentScheduleOverrides = {
-  "240188": {
-    power: { title: "Power Round", location: "Building 380, Room 380C" },
-    team: { title: "Team Round", location: "Building 380, Room 380C" },
-    subject1: { title: "Algebra", location: "Gates B01" },
-    subject2: { title: "Geometry", location: "Gates B03" },
-    guts: { location: "Hewlett 200, Section A" }
-  },
-  "240233": {
-    power: { title: "Power Round", location: "Huang 018" },
-    team: { title: "Team Round", location: "Huang 018" },
-    subject1: { title: "Calculus", location: "Hewlett 101" },
-    subject2: { title: "Discrete", location: "Hewlett 102" },
-    guts: { location: "Hewlett 200, Section C" }
-  },
-  "240311": {
-    power: { title: "Power Round", location: "Building 380, Room 380C" },
-    team: { title: "Team Round", location: "Building 380, Room 380C" },
-    subject1: { title: "General Test", location: "Cubberley Auditorium" },
-    guts: { location: "Hewlett 200, Section A" }
-  }
-};
 
 export const DEFAULT_ANNOUNCEMENTS: Announcement[] = [
   {

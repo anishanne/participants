@@ -1,9 +1,10 @@
 "use client";
 
 import ReactMarkdown from "react-markdown";
-import { FileUp, Megaphone, Plus, SendHorizonal, Trash2, WandSparkles } from "lucide-react";
+import { Megaphone, Plus, SendHorizonal, Trash2, WandSparkles } from "lucide-react";
 import { useDeferredValue, useState } from "react";
 import { useAppState } from "@/components/app-state-provider";
+import { RoomAssignments } from "@/components/room-assignments";
 
 const defaultAnnouncementBody = `## Tournament update
 
@@ -16,12 +17,10 @@ export function AdminDashboard() {
     addScheduleSlot,
     announcements,
     generalSchedule,
-    importOverrideCsv,
     publishAnnouncement,
     removeScheduleSlot,
     updateScheduleSlot
   } = useAppState();
-  const [csvStatus, setCsvStatus] = useState("");
   const [announcement, setAnnouncement] = useState({
     title: "New announcement",
     body: defaultAnnouncementBody,
@@ -29,23 +28,6 @@ export function AdminDashboard() {
     pushEnabled: true
   });
   const deferredBody = useDeferredValue(announcement.body);
-
-  async function handleCsvUpload(event: React.ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0];
-
-    if (!file) {
-      return;
-    }
-
-    const text = await file.text();
-    const result = importOverrideCsv(text);
-
-    setCsvStatus(
-      `Imported ${result.importedStudents} students. Matched columns: ${
-        result.matchedColumns.join(", ") || "none"
-      }. ${result.unmatchedColumns.length ? `Unmatched: ${result.unmatchedColumns.join(", ")}.` : ""}`
-    );
-  }
 
   async function handlePublish(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -155,23 +137,7 @@ export function AdminDashboard() {
         </div>
       </section>
 
-      <section className="panel p-5">
-        <div className="space-y-4">
-          <div>
-            <p className="eyebrow">CSV Import</p>
-            <h2 className="section-title mt-1">Room Assignments</h2>
-            <p className="body-copy mt-2">
-              Upload a CSV to assign rooms and tests per student.
-            </p>
-          </div>
-          <label className="flex cursor-pointer items-center justify-center gap-2 rounded-[1.4rem] border border-dashed border-[rgba(220,114,145,0.28)] bg-[rgba(255,245,248,0.75)] px-4 py-6 text-sm font-medium text-[color:var(--rose)]">
-            <FileUp className="h-4 w-4" />
-            Upload CSV
-            <input type="file" accept=".csv,text/csv" className="hidden" onChange={handleCsvUpload} />
-          </label>
-          {csvStatus ? <p className="text-sm text-[color:var(--ink-soft)]">{csvStatus}</p> : null}
-        </div>
-      </section>
+      <RoomAssignments />
 
       <section className="grid gap-5 lg:grid-cols-[1.05fr_0.95fr]">
         <form onSubmit={handlePublish} className="panel space-y-4 p-5">

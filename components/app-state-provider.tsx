@@ -4,6 +4,7 @@ import Papa from "papaparse";
 import {
   createContext,
   startTransition,
+  useCallback,
   useContext,
   useEffect,
   useState,
@@ -11,8 +12,6 @@ import {
 } from "react";
 import {
   DEFAULT_ANNOUNCEMENTS,
-  DEFAULT_OVERRIDES,
-  DEFAULT_PREFERENCES,
   DEFAULT_SCHEDULE,
   MAP_LOCATIONS
 } from "@/lib/demo-data";
@@ -22,13 +21,12 @@ import type {
   CsvImportResult,
   MapLocation,
   ParticipantPreferences,
-  PersistedAppState,
   ScheduleSlot,
   StudentScheduleOverrides
 } from "@/lib/types";
 import { parseStudentOverrideCsv } from "@/lib/utils";
 
-const STORAGE_KEY = "smt-participants-state-v1";
+const PREFS_KEY = "smt-user-prefs";
 
 interface AppStateContextValue {
   preferences: ParticipantPreferences;
@@ -41,44 +39,37 @@ interface AppStateContextValue {
   importOverrideCsv: (csvText: string) => CsvImportResult;
   announcements: Announcement[];
   publishAnnouncement: (draft: AnnouncementDraft) => void;
+  refreshAnnouncements: () => Promise<void>;
   mapLocations: MapLocation[];
 }
 
 const AppStateContext = createContext<AppStateContextValue | null>(null);
 
+const DEFAULT_PREFERENCES: ParticipantPreferences = {
+  studentId: "",
+  phoneNumber: "",
+  phoneVerified: false,
+  notificationsEnabled: false,
+  homeScreenPinned: false,
+  installPromptDismissed: false
+};
+
 export function AppStateProvider({ children }: { children: ReactNode }) {
   const [preferences, setPreferences] = useState(DEFAULT_PREFERENCES);
   const [generalSchedule, setGeneralSchedule] = useState(DEFAULT_SCHEDULE);
-  const [personalizedOverrides, setPersonalizedOverrides] = useState(DEFAULT_OVERRIDES);
-  const [announcements, setAnnouncements] = useState(DEFAULT_ANNOUNCEMENTS);
+  const [personalizedOverrides, setPersonalizedOverrides] = useState<StudentScheduleOverrides>({});
+  const [announcements, setAnnouncements] = useState<Announcement[]>(DEFAULT_ANNOUNCEMENTS);
   const [hydrated, setHydrated] = useState(false);
 
+  // Load user prefs from localStorage (only studentId + dismissals — not shared data)
   useEffect(() => {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
-
-    if (raw) {
-      try {
-        const parsed = JSON.parse(raw) as Partial<PersistedAppState>;
-
-        if (parsed.preferences) {
-          setPreferences((current) => ({ ...current, ...parsed.preferences }));
-        }
-
-        if (Array.isArray(parsed.generalSchedule) && parsed.generalSchedule.length > 0) {
-          setGeneralSchedule(parsed.generalSchedule);
-        }
-
-        if (parsed.personalizedOverrides) {
-          setPersonalizedOverrides(parsed.personalizedOverrides);
-        }
-
-        if (Array.isArray(parsed.announcements) && parsed.announcements.length > 0) {
-          setAnnouncements(parsed.announcements);
-        }
-      } catch {
-        window.localStorage.removeItem(STORAGE_KEY);
+    try {
+      const raw = window.localStorage.getItem(PREFS_KEY);
+      if (raw) {
+        const saved = JSON.parse(raw) as Partial<ParticipantPreferences>;
+        setPreferences((current) => ({ ...current, ...saved }));
       }
-    }
+    } catch {}
 
     const homeScreenPinned =
       window.matchMedia("(display-mode: standalone)").matches || Boolean(window.navigator.standalone);
@@ -93,56 +84,111 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     setHydrated(true);
   }, []);
 
+  // Persist only user prefs to localStorage
   useEffect(() => {
-    if (!hydrated) {
-      return;
+    if (!hydrated) return;
+    window.localStorage.setItem(PREFS_KEY, JSON.stringify({
+      studentId: preferences.studentId,
+      phoneNumber: preferences.phoneNumber,
+      phoneVerified: preferences.phoneVerified,
+      installPromptDismissed: preferences.installPromptDismissed
+    }));
+  }, [hydrated, preferences]);
+
+  // Load schedule + announcements from Supabase on mount
+  useEffect(() => {
+    async function loadFromDb() {
+      try {
+        const { getSupabase } = await import("@/lib/supabase-server");
+        const supabase = getSupabase();
+        if (!supabase) return;
+
+        const [scheduleRes, announcementsRes] = await Promise.all([
+          supabase.from("schedule_slots").select("*").order("sort_order"),
+          supabase.from("announcements").select("*").order("created_at", { ascending: false })
+        ]);
+
+        if (scheduleRes.data && scheduleRes.data.length > 0) {
+          setGeneralSchedule(scheduleRes.data.map(mapDbSlot));
+        }
+
+        if (announcementsRes.data && announcementsRes.data.length > 0) {
+          setAnnouncements(announcementsRes.data.map(mapDbAnnouncement));
+        }
+      } catch {
+        // Supabase unavailable — keep defaults
+      }
     }
 
-    const payload: PersistedAppState = {
-      preferences,
-      generalSchedule,
-      personalizedOverrides,
-      announcements
-    };
+    loadFromDb();
+  }, []);
 
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
-  }, [announcements, generalSchedule, hydrated, personalizedOverrides, preferences]);
+  const refreshAnnouncements = useCallback(async () => {
+    try {
+      const { getSupabase } = await import("@/lib/supabase-server");
+      const supabase = getSupabase();
+      if (!supabase) return;
+
+      const { data } = await supabase
+        .from("announcements")
+        .select("*")
+        .order("created_at", { ascending: false });
+
+      if (data && data.length > 0) {
+        setAnnouncements(data.map(mapDbAnnouncement));
+      }
+    } catch {}
+  }, []);
 
   function updatePreferences(patch: Partial<ParticipantPreferences>) {
-    setPreferences((current) => ({
-      ...current,
-      ...patch
-    }));
+    setPreferences((current) => ({ ...current, ...patch }));
   }
 
   function addScheduleSlot() {
     const nextIndex = generalSchedule.length + 1;
+    const newSlot: ScheduleSlot = {
+      id: `slot_${crypto.randomUUID()}`,
+      slug: `CustomSlot${nextIndex}`,
+      time: "6:00 PM",
+      title: "New Schedule Item",
+      location: "TBD",
+      description: "",
+      track: "Custom"
+    };
 
-    setGeneralSchedule((current) => [
-      ...current,
-      {
-        id: `slot_${crypto.randomUUID()}`,
-        slug: `CustomSlot${nextIndex}`,
-        time: "6:00 PM",
-        title: "New Schedule Item",
-        location: "TBD",
-        description: "Describe the activity, who needs to attend, and where to go.",
-        track: "Custom"
-      }
-    ]);
+    setGeneralSchedule((current) => [...current, newSlot]);
+
+    // Persist to Supabase
+    import("@/lib/supabase-server").then(({ getSupabase }) => {
+      const supabase = getSupabase();
+      if (!supabase) return;
+      supabase.from("schedule_slots").insert({
+        slug: newSlot.slug,
+        starts_at: new Date().toISOString(),
+        title: newSlot.title,
+        location: newSlot.location,
+        description: newSlot.description,
+        track: newSlot.track,
+        sort_order: nextIndex
+      });
+    });
   }
 
   function removeScheduleSlot(slotId: string) {
     setGeneralSchedule((current) => current.filter((slot) => slot.id !== slotId));
     setPersonalizedOverrides((current) => {
       const nextEntries = Object.entries(current).map(([studentId, slots]) => {
-        const { [slotId]: removedSlot, ...rest } = slots;
-        void removedSlot;
-
+        const { [slotId]: removed, ...rest } = slots;
+        void removed;
         return [studentId, rest] as const;
       });
-
       return Object.fromEntries(nextEntries);
+    });
+
+    import("@/lib/supabase-server").then(({ getSupabase }) => {
+      const supabase = getSupabase();
+      if (!supabase) return;
+      supabase.from("schedule_slots").delete().eq("id", slotId);
     });
   }
 
@@ -150,6 +196,12 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     setGeneralSchedule((current) =>
       current.map((slot) => (slot.id === slotId ? { ...slot, ...patch } : slot))
     );
+
+    import("@/lib/supabase-server").then(({ getSupabase }) => {
+      const supabase = getSupabase();
+      if (!supabase) return;
+      supabase.from("schedule_slots").update(patch).eq("id", slotId);
+    });
   }
 
   function importOverrideCsv(csvText: string) {
@@ -172,19 +224,32 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
   }
 
   function publishAnnouncement(draft: AnnouncementDraft) {
+    const newAnnouncement: Announcement = {
+      id: crypto.randomUUID(),
+      title: draft.title.trim(),
+      body: draft.body.trim(),
+      createdAt: new Date().toISOString(),
+      author: "Admin",
+      smsEnabled: draft.smsEnabled,
+      pushEnabled: draft.pushEnabled
+    };
+
     startTransition(() => {
-      setAnnouncements((current) => [
-        {
-          id: crypto.randomUUID(),
-          title: draft.title.trim(),
-          body: draft.body.trim(),
-          createdAt: new Date().toISOString(),
-          author: "Admin Console",
-          smsEnabled: draft.smsEnabled,
-          pushEnabled: draft.pushEnabled
-        },
-        ...current
-      ]);
+      setAnnouncements((current) => [newAnnouncement, ...current]);
+    });
+
+    // Persist to Supabase
+    import("@/lib/supabase-server").then(({ getSupabase }) => {
+      const supabase = getSupabase();
+      if (!supabase) return;
+      supabase.from("announcements").insert({
+        title: newAnnouncement.title,
+        body_markdown: newAnnouncement.body,
+        sms_enabled: newAnnouncement.smsEnabled,
+        push_enabled: newAnnouncement.pushEnabled,
+        audience_mode: "all",
+        author_name: newAnnouncement.author
+      });
     });
   }
 
@@ -201,6 +266,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
         importOverrideCsv,
         announcements,
         publishAnnouncement,
+        refreshAnnouncements,
         mapLocations: MAP_LOCATIONS
       }}
     >
@@ -217,4 +283,36 @@ export function useAppState() {
   }
 
   return context;
+}
+
+// Map Supabase row shapes to app types
+function mapDbSlot(row: Record<string, unknown>): ScheduleSlot {
+  const startsAt = new Date(row.starts_at as string);
+  const hours = startsAt.getHours();
+  const minutes = startsAt.getMinutes();
+  const period = hours >= 12 ? "PM" : "AM";
+  const displayHours = hours === 0 ? 12 : hours > 12 ? hours - 12 : hours;
+  const time = `${displayHours}:${String(minutes).padStart(2, "0")} ${period}`;
+
+  return {
+    id: row.id as string,
+    slug: row.slug as string,
+    time,
+    title: row.title as string,
+    location: row.location as string,
+    description: row.description as string,
+    track: row.track as string
+  };
+}
+
+function mapDbAnnouncement(row: Record<string, unknown>): Announcement {
+  return {
+    id: row.id as string,
+    title: row.title as string,
+    body: row.body_markdown as string,
+    createdAt: row.created_at as string,
+    author: row.author_name as string,
+    smsEnabled: row.sms_enabled as boolean,
+    pushEnabled: row.push_enabled as boolean
+  };
 }

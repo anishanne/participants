@@ -63,9 +63,3 @@ export interface CsvImportResult {
   unmatchedColumns: string[];
 }
 
-export interface PersistedAppState {
-  preferences: ParticipantPreferences;
-  generalSchedule: ScheduleSlot[];
-  personalizedOverrides: StudentScheduleOverrides;
-  announcements: Announcement[];
-}
