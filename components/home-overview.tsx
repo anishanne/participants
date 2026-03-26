@@ -611,9 +611,9 @@ function SetupChecklist() {
               <>
                 <p className="font-semibold text-[color:var(--ink)]">How to add on Android:</p>
                 <ol className="list-decimal pl-4 space-y-1">
-                  <li>Tap the <strong className="text-[color:var(--ink)]">&#8942;</strong> menu in Chrome (top right)</li>
-                  <li>Tap <strong className="text-[color:var(--ink)]">Add to Home screen</strong></li>
-                  <li>Tap <strong className="text-[color:var(--ink)]">Install</strong></li>
+                  <li>Tap your browser&apos;s <strong className="text-[color:var(--ink)]">menu</strong> (usually top right)</li>
+                  <li>Look for <strong className="text-[color:var(--ink)]">Install app</strong> or <strong className="text-[color:var(--ink)]">Add to Home screen</strong></li>
+                  <li>Confirm the install</li>
                 </ol>
               </>
             )}
