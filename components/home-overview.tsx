@@ -160,9 +160,9 @@ export function HomeOverview() {
           <Countdown targetDate={TOURNAMENT_DATE} />
           <div className="space-y-2">
             <div className="flex flex-wrap gap-2">
-              <StatusPill done={preferences.homeScreenPinned} label="Home screen" />
-              <StatusPill done={preferences.notificationsEnabled} label="Push" />
-              {smsEnabled ? <StatusPill done={preferences.phoneVerified} label="SMS" /> : null}
+              <StatusPill done={preferences.homeScreenPinned} label={preferences.homeScreenPinned ? "Pinned to Home" : "Not pinned"} />
+              <StatusPill done={preferences.notificationsEnabled} label={preferences.notificationsEnabled ? "Push Activated" : "Push pending"} />
+              {smsEnabled ? <StatusPill done={preferences.phoneVerified} label={preferences.phoneVerified ? "SMS Verified" : "SMS pending"} /> : null}
             </div>
             {preferences.notificationsEnabled ? <TestPushPill /> : null}
           </div>
@@ -402,7 +402,7 @@ function StatusPill({ done, label }: { done: boolean; label: string }) {
       <span
         className={`h-1.5 w-1.5 rounded-full ${done ? "bg-emerald-400" : "bg-amber-400"}`}
       />
-      {label} {done ? "on" : "pending"}
+      {label}
     </span>
   );
 }

@@ -3,7 +3,7 @@
 import { RefreshCw } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 
-const CHECK_INTERVAL = 30_000; // 30 seconds
+const CHECK_INTERVAL = 30_000;
 
 export function UpdateBanner() {
   const [updateAvailable, setUpdateAvailable] = useState(false);
@@ -34,22 +34,18 @@ export function UpdateBanner() {
         }
 
         if (buildId !== initialBuildId) {
-          // If page is hidden/not focused, auto-refresh silently
           if (document.hidden) {
             doRefresh();
             return;
           }
           setUpdateAvailable(true);
         }
-      } catch {
-        // Offline or error — skip
-      }
+      } catch {}
     }
 
     checkForUpdate();
     const interval = setInterval(checkForUpdate, CHECK_INTERVAL);
 
-    // Also auto-refresh when user returns to a stale tab
     function handleVisibilityChange() {
       if (!document.hidden && updateAvailable) {
         doRefresh();
@@ -67,19 +63,26 @@ export function UpdateBanner() {
   if (!updateAvailable) return null;
 
   return (
-    <div className="fixed left-1/2 top-[max(1rem,env(safe-area-inset-top))] z-50 w-[calc(100%-2rem)] max-w-sm -translate-x-1/2 animate-fade-in rounded-2xl border border-[color:var(--line)] bg-[rgba(255,251,240,0.97)] px-5 py-4 shadow-lift backdrop-blur">
-      <div className="flex items-center gap-3">
-        <div className="flex-1 min-w-0">
-          <p className="text-sm font-semibold text-[color:var(--ink)]">Update available</p>
-          <p className="mt-0.5 text-xs text-[color:var(--ink-soft)]">A new version has been deployed.</p>
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-[rgba(59,28,28,0.6)] backdrop-blur-sm">
+      <div className="mx-6 w-full max-w-sm animate-fade-in space-y-6 rounded-[2rem] border border-white/70 bg-[rgba(255,251,240,0.98)] px-8 py-10 text-center shadow-lift">
+        <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-[rgba(152,28,29,0.1)]">
+          <RefreshCw className="h-8 w-8 text-[color:var(--crimson)]" />
+        </div>
+        <div className="space-y-2">
+          <h2 className="text-xl font-semibold tracking-tight text-[color:var(--ink)]">
+            Update Available
+          </h2>
+          <p className="text-sm text-[color:var(--ink-soft)]">
+            A new version of SMT 2026 has been deployed. Refresh to get the latest.
+          </p>
         </div>
         <button
           type="button"
           onClick={doRefresh}
-          className="inline-flex items-center gap-1.5 rounded-full bg-[color:var(--crimson)] px-4 py-2 text-xs font-semibold text-white transition hover:brightness-105"
+          className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-[color:var(--crimson)] px-6 py-4 text-sm font-semibold text-white transition hover:brightness-105"
         >
-          <RefreshCw className="h-3 w-3" />
-          Refresh
+          <RefreshCw className="h-4 w-4" />
+          Refresh Now
         </button>
       </div>
     </div>
