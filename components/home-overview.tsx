@@ -17,7 +17,6 @@ import {
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useAppState } from "@/components/app-state-provider";
-import { TOURNAMENT_DATE } from "@/lib/demo-data";
 import type { ScheduleSlot } from "@/lib/types";
 import { formatDisplayPhone, formatPhone } from "@/lib/utils";
 
@@ -113,7 +112,7 @@ function getEventStatus(schedule: ScheduleSlot[], tournamentDate: string): Event
 /* ---------- Main component ---------- */
 
 export function HomeOverview() {
-  const { announcements, generalSchedule, preferences, updatePreferences } = useAppState();
+  const { announcements, generalSchedule, preferences, updatePreferences, tournamentDate } = useAppState();
 
   const smsEnabled = process.env.NEXT_PUBLIC_SMS_ENABLED === "true";
 
@@ -122,15 +121,15 @@ export function HomeOverview() {
     : preferences.homeScreenPinned && preferences.notificationsEnabled;
 
   const [eventStatus, setEventStatus] = useState<EventStatus>(() =>
-    getEventStatus(generalSchedule, TOURNAMENT_DATE)
+    getEventStatus(generalSchedule, tournamentDate)
   );
 
   useEffect(() => {
     const interval = setInterval(() => {
-      setEventStatus(getEventStatus(generalSchedule, TOURNAMENT_DATE));
-    }, 30_000); // re-check every 30 seconds
+      setEventStatus(getEventStatus(generalSchedule, tournamentDate));
+    }, 30_000);
     return () => clearInterval(interval);
-  }, [generalSchedule]);
+  }, [generalSchedule, tournamentDate]);
 
   const latestAnnouncement = announcements[0] ?? null;
 
@@ -156,7 +155,7 @@ export function HomeOverview() {
               April 18, 2026 &middot; Stanford University
             </p>
           </div>
-          <Countdown targetDate={TOURNAMENT_DATE} />
+          <Countdown targetDate={tournamentDate} />
           <div className="space-y-2">
             <div className="flex flex-wrap gap-2">
               <StatusPill done={preferences.homeScreenPinned} label={preferences.homeScreenPinned ? "Pinned to Home" : "Not pinned"} />

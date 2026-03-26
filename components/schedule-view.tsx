@@ -3,7 +3,6 @@
 import { CalendarRange, Check, ChevronDown, Loader2, MapPin, Radio, Sparkles, User } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { useAppState } from "@/components/app-state-provider";
-import { TOURNAMENT_DATE } from "@/lib/demo-data";
 import { lookupStudent, type StudentLookupResult } from "@/lib/csv-lookup";
 import type { ResolvedScheduleSlot } from "@/lib/types";
 
@@ -41,7 +40,7 @@ function getSlotStatus(
 }
 
 export function ScheduleView() {
-  const { generalSchedule, preferences, updatePreferences } = useAppState();
+  const { generalSchedule, preferences, updatePreferences, tournamentDate } = useAppState();
   const [mode, setMode] = useState<"personalized" | "general">("personalized");
   const [lookupResult, setLookupResult] = useState<StudentLookupResult | null>(null);
   const [lookupError, setLookupError] = useState(false);
@@ -190,7 +189,7 @@ export function ScheduleView() {
         <div className="relative">
           {displayedSlots.map((slot, i) => {
             const nextSlot = i + 1 < displayedSlots.length ? displayedSlots[i + 1] : null;
-            const status = getSlotStatus(slot, nextSlot, TOURNAMENT_DATE);
+            const status = getSlotStatus(slot, nextSlot, tournamentDate);
             const isLast = i === displayedSlots.length - 1;
             const isExpanded = expandedId === slot.id;
             const personalized = slot.isPersonalized;

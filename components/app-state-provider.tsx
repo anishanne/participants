@@ -10,11 +10,7 @@ import {
   useState,
   type ReactNode
 } from "react";
-import {
-  DEFAULT_ANNOUNCEMENTS,
-  DEFAULT_SCHEDULE,
-  MAP_LOCATIONS
-} from "@/lib/demo-data";
+import { MAP_LOCATIONS } from "@/lib/demo-data";
 import type {
   Announcement,
   CsvImportResult,
@@ -38,6 +34,7 @@ interface AppStateContextValue {
   importOverrideCsv: (csvText: string) => CsvImportResult;
   announcements: Announcement[];
   refreshAnnouncements: () => Promise<void>;
+  tournamentDate: string;
   mapLocations: MapLocation[];
 }
 
@@ -54,9 +51,10 @@ const DEFAULT_PREFERENCES: ParticipantPreferences = {
 
 export function AppStateProvider({ children }: { children: ReactNode }) {
   const [preferences, setPreferences] = useState(DEFAULT_PREFERENCES);
-  const [generalSchedule, setGeneralSchedule] = useState(DEFAULT_SCHEDULE);
+  const [generalSchedule, setGeneralSchedule] = useState<ScheduleSlot[]>([]);
   const [personalizedOverrides, setPersonalizedOverrides] = useState<StudentScheduleOverrides>({});
-  const [announcements, setAnnouncements] = useState<Announcement[]>(DEFAULT_ANNOUNCEMENTS);
+  const [announcements, setAnnouncements] = useState<Announcement[]>([]);
+  const [tournamentDate, setTournamentDate] = useState("2026-04-18T07:00:00-07:00");
   const [hydrated, setHydrated] = useState(false);
 
   // Load user prefs from localStorage (only studentId + dismissals — not shared data)
@@ -97,9 +95,10 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     async function loadFromApi() {
       try {
-        const [scheduleRes, announcementsRes] = await Promise.all([
+        const [scheduleRes, announcementsRes, settingsRes] = await Promise.all([
           fetch("/api/schedule"),
-          fetch("/api/announcements")
+          fetch("/api/announcements"),
+          fetch("/api/settings")
         ]);
 
         if (scheduleRes.ok) {
@@ -113,6 +112,13 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
           const data = await announcementsRes.json();
           if (Array.isArray(data) && data.length > 0) {
             setAnnouncements(data.map(mapDbAnnouncement));
+          }
+        }
+
+        if (settingsRes.ok) {
+          const settings = await settingsRes.json();
+          if (settings.tournament_date) {
+            setTournamentDate(settings.tournament_date);
           }
         }
       } catch {
@@ -229,6 +235,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
         importOverrideCsv,
         announcements,
         refreshAnnouncements,
+        tournamentDate,
         mapLocations: MAP_LOCATIONS
       }}
     >
@@ -250,8 +257,10 @@ export function useAppState() {
 // Map Supabase row shapes to app types
 function mapDbSlot(row: Record<string, unknown>): ScheduleSlot {
   const startsAt = new Date(row.starts_at as string);
-  const hours = startsAt.getHours();
-  const minutes = startsAt.getMinutes();
+  // Force PST display
+  const pst = new Date(startsAt.toLocaleString("en-US", { timeZone: "America/Los_Angeles" }));
+  const hours = pst.getHours();
+  const minutes = pst.getMinutes();
   const period = hours >= 12 ? "PM" : "AM";
   const displayHours = hours === 0 ? 12 : hours > 12 ? hours - 12 : hours;
   const time = `${displayHours}:${String(minutes).padStart(2, "0")} ${period}`;
