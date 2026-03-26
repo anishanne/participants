@@ -769,10 +769,21 @@ function TestPushPill() {
       type="button"
       onClick={sendTest}
       disabled={state === "sending"}
-      className="pill border-white/15 bg-white/10 text-white transition hover:bg-white/20 disabled:opacity-70"
+      className="pill min-w-[5.5rem] justify-center border-white/15 bg-white/10 text-white transition hover:bg-white/20 disabled:opacity-70"
     >
-      <BellRing className="h-3 w-3" />
-      {state === "sent" ? "Sent!" : state === "error" ? "Failed" : "Test push"}
+      {state === "sent" ? (
+        <>
+          <Check className="h-3 w-3" />
+          Sent!
+        </>
+      ) : state === "error" ? (
+        "Failed"
+      ) : (
+        <>
+          <BellRing className="h-3 w-3" />
+          Test push
+        </>
+      )}
     </button>
   );
 }

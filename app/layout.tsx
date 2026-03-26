@@ -3,6 +3,7 @@ import { Roboto } from "next/font/google";
 import { AppStateProvider } from "@/components/app-state-provider";
 import { OfflineBanner } from "@/components/offline-banner";
 import { PwaRegister } from "@/components/pwa-register";
+import { UpdateBanner } from "@/components/update-banner";
 import "./globals.css";
 
 const roboto = Roboto({
@@ -62,6 +63,7 @@ export default function RootLayout({
         <AppStateProvider>
           <PwaRegister />
           <OfflineBanner />
+          <UpdateBanner />
           {children}
         </AppStateProvider>
       </body>
