@@ -5,6 +5,7 @@ import Link from "next/link";
 import ReactMarkdown from "react-markdown";
 import {
   Bell,
+  BellRing,
   CalendarClock,
   Check,
   Circle,
@@ -601,7 +602,9 @@ function SetupChecklist() {
                   : null
           }
           action={
-            !preferences.notificationsEnabled &&
+            preferences.notificationsEnabled ? (
+              <TestPushButton />
+            ) : !preferences.notificationsEnabled &&
             notifPermission !== "denied" &&
             notifPermission !== "unsupported" ? (
               <button
@@ -736,5 +739,42 @@ function SetupStepRow({
       </div>
       {action}
     </div>
+  );
+}
+
+/* ---------- Test push button ---------- */
+
+function TestPushButton() {
+  const [state, setState] = useState<"idle" | "sending" | "sent" | "error">("idle");
+
+  async function sendTest() {
+    setState("sending");
+    try {
+      // Trigger a local notification via the service worker directly
+      const registration = await navigator.serviceWorker.ready;
+      await registration.showNotification("SMT 2026", {
+        body: "Push notifications are working!",
+        icon: "/icon.png",
+        badge: "/icon.png",
+        tag: "smt-test"
+      });
+      setState("sent");
+      setTimeout(() => setState("idle"), 3000);
+    } catch {
+      setState("error");
+      setTimeout(() => setState("idle"), 3000);
+    }
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={sendTest}
+      disabled={state === "sending"}
+      className="inline-flex items-center gap-1.5 rounded-full border border-[color:var(--line)] px-3 py-1.5 text-xs font-medium text-[color:var(--ink)] transition hover:bg-white disabled:opacity-70"
+    >
+      <BellRing className="h-3 w-3" />
+      {state === "sending" ? "Sending..." : state === "sent" ? "Sent!" : state === "error" ? "Failed" : "Test"}
+    </button>
   );
 }
