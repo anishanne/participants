@@ -764,26 +764,17 @@ function TestPushPill() {
     }
   }
 
+  const label = state === "sent" ? "Sent!" : state === "error" ? "Failed" : "Test push";
+
   return (
     <button
       type="button"
       onClick={sendTest}
       disabled={state === "sending"}
-      className="pill min-w-[5.5rem] justify-center border-white/15 bg-white/10 text-white transition hover:bg-white/20 disabled:opacity-70"
+      className="inline-flex items-center gap-1.5 rounded-full border border-white/15 bg-white/10 px-3 py-1 text-xs font-medium text-white transition hover:bg-white/20 disabled:opacity-70"
     >
-      {state === "sent" ? (
-        <>
-          <Check className="h-3 w-3" />
-          Sent!
-        </>
-      ) : state === "error" ? (
-        "Failed"
-      ) : (
-        <>
-          <BellRing className="h-3 w-3" />
-          Test push
-        </>
-      )}
+      {state === "sent" ? <Check className="h-3 w-3" /> : <BellRing className="h-3 w-3" />}
+      {label}
     </button>
   );
 }
