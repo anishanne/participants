@@ -17,7 +17,6 @@ export function AnnouncementsFeed() {
           <div>
             <p className="eyebrow">Announcements</p>
             <h1 className="section-title mt-1">Tournament updates</h1>
-            <p className="body-copy mt-2">Updates coming in live from SMT organizers. Need help? Contact us at <a href="mailto:info@stanfordmathtournament.org" className="text-xs text-[color:var(--ink-soft)] hover:underline">info@stanfordmathtournament.org</a></p>
           </div>
         </div>
       </section>

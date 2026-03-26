@@ -1,10 +1,44 @@
 "use client";
 
-import { CalendarRange, Loader2, MapPin, Sparkles, User } from "lucide-react";
+import { CalendarRange, Check, ChevronDown, Loader2, MapPin, Radio, Sparkles, User } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { useAppState } from "@/components/app-state-provider";
+import { TOURNAMENT_DATE } from "@/lib/demo-data";
 import { lookupStudent, type StudentLookupResult } from "@/lib/csv-lookup";
 import type { ResolvedScheduleSlot } from "@/lib/types";
+
+function parseTime(timeStr: string, tournamentDate: string): Date {
+  const base = new Date(tournamentDate);
+  const match = timeStr.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
+  if (!match) return base;
+  let hours = parseInt(match[1], 10);
+  const minutes = parseInt(match[2], 10);
+  const period = match[3].toUpperCase();
+  if (period === "PM" && hours !== 12) hours += 12;
+  if (period === "AM" && hours === 12) hours = 0;
+  const result = new Date(base);
+  result.setHours(hours, minutes, 0, 0);
+  return result;
+}
+
+function getSlotStatus(
+  slot: { time: string },
+  nextSlot: { time: string } | null,
+  tournamentDate: string
+): "completed" | "current" | "upcoming" | "none" {
+  const now = new Date();
+  const tDay = new Date(tournamentDate);
+  if (now.toDateString() !== tDay.toDateString()) return "none";
+
+  const start = parseTime(slot.time, tournamentDate);
+  const end = nextSlot
+    ? parseTime(nextSlot.time, tournamentDate)
+    : new Date(start.getTime() + 90 * 60 * 1000);
+
+  if (now >= end) return "completed";
+  if (now >= start && now < end) return "current";
+  return "upcoming";
+}
 
 export function ScheduleView() {
   const { generalSchedule, preferences, updatePreferences } = useAppState();
@@ -12,6 +46,14 @@ export function ScheduleView() {
   const [lookupResult, setLookupResult] = useState<StudentLookupResult | null>(null);
   const [lookupError, setLookupError] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [, setTick] = useState(0);
+
+  // Re-render every 30s to update current event indicator
+  useEffect(() => {
+    const interval = setInterval(() => setTick((t) => t + 1), 30_000);
+    return () => clearInterval(interval);
+  }, []);
 
   const doLookup = useCallback(async (badge: string) => {
     if (!badge) {
@@ -19,10 +61,8 @@ export function ScheduleView() {
       setLookupError(false);
       return;
     }
-
     setLoading(true);
     setLookupError(false);
-
     try {
       const result = await lookupStudent(badge);
       setLookupResult(result);
@@ -35,14 +75,12 @@ export function ScheduleView() {
     }
   }, []);
 
-  // Look up when badge number changes (debounced)
   useEffect(() => {
     if (!preferences.studentId) {
       setLookupResult(null);
       setLookupError(false);
       return;
     }
-
     const timeout = setTimeout(() => doLookup(preferences.studentId), 300);
     return () => clearTimeout(timeout);
   }, [preferences.studentId, doLookup]);
@@ -62,145 +100,191 @@ export function ScheduleView() {
     : generalSchedule.map((slot) => ({ ...slot, isPersonalized: false }));
 
   return (
-    <div className="space-y-5">
-      <section className="panel bg-[linear-gradient(145deg,rgba(255,255,255,0.85),rgba(255,251,240,0.95))] p-5">
-        <div className="space-y-4">
-          <div className="flex items-start gap-3">
-            <div className="rounded-2xl bg-[rgba(152,28,29,0.1)] p-3 text-[color:var(--crimson)]">
-              <CalendarRange className="h-5 w-5" />
-            </div>
-            <div>
-              <p className="eyebrow">Schedule</p>
-              <h1 className="section-title mt-1">SMT 2026 Tournament Day</h1>
-              <p className="body-copy mt-2">
-                Enter your badge number to see your rooms.
-              </p>
+    <div className="space-y-4">
+      {/* Header — matches map page style */}
+      <section className="panel p-5">
+        <div className="flex items-start gap-3">
+          <div className="rounded-2xl bg-[rgba(152,28,29,0.1)] p-3 text-[color:var(--crimson)]">
+            <CalendarRange className="h-5 w-5" />
+          </div>
+          <div>
+            <p className="eyebrow">Schedule</p>
+            <h1 className="section-title mt-1">SMT 2026 Tournament Day</h1>
+          </div>
+        </div>
+      </section>
+
+      {/* Badge lookup */}
+      <section className="panel p-4">
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <label className="text-sm font-medium text-[color:var(--ink)]">Badge Number</label>
+            <div className="inline-flex rounded-full border border-[color:var(--line)] bg-white/85 p-0.5">
+              <button
+                type="button"
+                onClick={() => setMode("personalized")}
+                className={`rounded-full px-3 py-1 text-xs font-medium transition ${
+                  showPersonalized ? "bg-[color:var(--ink)] text-white" : "text-[color:var(--ink-soft)]"
+                }`}
+              >
+                My Schedule
+              </button>
+              <button
+                type="button"
+                onClick={() => setMode("general")}
+                className={`rounded-full px-3 py-1 text-xs font-medium transition ${
+                  !showPersonalized ? "bg-[color:var(--ink)] text-white" : "text-[color:var(--ink-soft)]"
+                }`}
+              >
+                General
+              </button>
             </div>
           </div>
-          <label className="block space-y-2">
-            <span className="text-sm font-medium text-[color:var(--ink)]">Badge Number</span>
-            <div className="relative">
-              <input
-                value={preferences.studentId}
-                onChange={(event) => updatePreferences({ studentId: event.target.value.trim() })}
-                placeholder="e.g. 001A"
-                className="w-full rounded-2xl border border-[color:var(--line)] bg-white/85 px-4 py-3 text-sm text-[color:var(--ink)] outline-none transition focus:border-[color:var(--crimson)]"
-              />
-              {loading ? (
-                <Loader2 className="absolute right-4 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-[color:var(--ink-soft)]" />
-              ) : null}
-            </div>
-          </label>
 
-          {/* Student found banner */}
+          <div className="relative">
+            <input
+              value={preferences.studentId}
+              onChange={(event) => updatePreferences({ studentId: event.target.value.trim() })}
+              placeholder="e.g. 001A"
+              className="w-full rounded-xl border border-[color:var(--line)] bg-white/85 px-3 py-2.5 text-sm text-[color:var(--ink)] outline-none transition focus:border-[color:var(--crimson)]"
+            />
+            {loading ? (
+              <Loader2 className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-[color:var(--ink-soft)]" />
+            ) : null}
+          </div>
+
           {lookupResult ? (
-            <div className="flex items-center gap-3 rounded-[1.2rem] border border-emerald-200 bg-emerald-50/80 px-4 py-3">
-              <User className="h-4 w-4 shrink-0 text-emerald-600" />
-              <div className="min-w-0 flex-1">
-                <p className="text-sm font-semibold text-emerald-900 truncate">
-                  {lookupResult.studentName}
-                </p>
-                <p className="text-xs text-emerald-700 truncate">
-                  Team {lookupResult.teamNumber} &middot; {lookupResult.teamName}
-                  {lookupResult.tests ? ` · ${lookupResult.tests}` : ""}
-                </p>
-              </div>
+            <div className="flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50/80 px-3 py-2">
+              <User className="h-3.5 w-3.5 shrink-0 text-emerald-600" />
+              <p className="text-xs font-medium text-emerald-900 truncate">
+                {lookupResult.studentName} &middot; Team {lookupResult.teamNumber}
+                {lookupResult.tests ? ` · ${lookupResult.tests}` : ""}
+              </p>
             </div>
           ) : null}
 
-          {/* Not found */}
           {lookupError && preferences.studentId ? (
-            <div className="rounded-[1.2rem] border border-[rgba(152,28,29,0.15)] bg-[rgba(152,28,29,0.04)] px-4 py-3">
-              <p className="text-sm text-[color:var(--crimson)]">
-                No student found for badge &ldquo;{preferences.studentId}&rdquo;
+            <div className="rounded-xl border border-[rgba(152,28,29,0.15)] bg-[rgba(152,28,29,0.04)] px-3 py-2">
+              <p className="text-xs text-[color:var(--crimson)]">
+                No student found for &ldquo;{preferences.studentId}&rdquo;
               </p>
-              <a href="mailto:info@stanfordmathtournament.org" className="mt-1 block text-xs text-[color:var(--ink-soft)] hover:underline">
+              <a href="mailto:info@stanfordmathtournament.org" className="text-[10px] text-[color:var(--ink-soft)] hover:underline">
                 Need help? Contact info@stanfordmathtournament.org
               </a>
             </div>
           ) : null}
 
-          <div className="inline-flex rounded-full border border-[color:var(--line)] bg-white/85 p-1">
-            <button
-              type="button"
-              onClick={() => setMode("personalized")}
-              className={`rounded-full px-4 py-2 text-sm font-medium transition ${
-                showPersonalized ? "bg-[color:var(--ink)] text-white" : "text-[color:var(--ink-soft)]"
-              }`}
-            >
-              My Schedule
-            </button>
-            <button
-              type="button"
-              onClick={() => setMode("general")}
-              className={`rounded-full px-4 py-2 text-sm font-medium transition ${
-                !showPersonalized ? "bg-[color:var(--ink)] text-white" : "text-[color:var(--ink-soft)]"
-              }`}
-            >
-              General
-            </button>
-          </div>
+          {!lookupResult && !lookupError && !preferences.studentId ? (
+            <div className="flex items-start gap-2 rounded-xl border border-[color:var(--line)] bg-white/50 px-3 py-2">
+              <Sparkles className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[color:var(--gold)]" />
+              <p className="text-xs text-[color:var(--ink-soft)]">
+                Your badge number is printed on your name tag. It unlocks personalized room assignments and test info.
+              </p>
+            </div>
+          ) : null}
         </div>
       </section>
 
-      {!lookupResult && mode === "personalized" ? (
-        <section className="panel-muted p-5">
-          <div className="flex items-start gap-3">
-            <Sparkles className="mt-0.5 h-5 w-5 text-[color:var(--gold)]" />
-            <div>
-              <h2 className="text-base font-semibold tracking-tight">
-                {preferences.studentId ? "Looking up your schedule..." : "Enter your badge number to see your rooms."}
-              </h2>
-              <p className="body-copy mt-2">
-                Your badge number is printed on your name tag (e.g. 001A). It unlocks personalized room assignments and test info.
-              </p>
-            </div>
-          </div>
-        </section>
-      ) : null}
+      {/* Timeline */}
+      <section className="panel px-4 py-3">
+        <div className="relative">
+          {displayedSlots.map((slot, i) => {
+            const nextSlot = i + 1 < displayedSlots.length ? displayedSlots[i + 1] : null;
+            const status = getSlotStatus(slot, nextSlot, TOURNAMENT_DATE);
+            const isLast = i === displayedSlots.length - 1;
+            const isExpanded = expandedId === slot.id;
+            const personalized = slot.isPersonalized;
+            const displayTitle = personalized && slot.personalizedTitle ? slot.personalizedTitle : slot.title;
+            const displayLocation = personalized && slot.personalizedLocation ? slot.personalizedLocation : slot.location;
+            const isCompleted = status === "completed";
+            const isCurrent = status === "current";
 
-      <section className="space-y-3">
-        {displayedSlots.map((slot) => {
-          const personalized = slot.isPersonalized;
-          const displayTitle = personalized && slot.personalizedTitle
-            ? slot.personalizedTitle
-            : slot.title;
-          const displayLocation = personalized && slot.personalizedLocation
-            ? slot.personalizedLocation
-            : slot.location;
-
-          return (
-            <article key={slot.id} className="panel p-5">
-              <div className="flex items-start justify-between gap-4">
-                <div>
-                  <p className="eyebrow">{slot.time}</p>
-                  <h2 className="mt-1 text-lg font-semibold tracking-tight text-[color:var(--ink)]">
-                    {displayTitle}
-                  </h2>
-                  {personalized && slot.personalizedTitle && slot.personalizedTitle !== slot.title ? (
-                    <p className="mt-1 text-xs text-[color:var(--ink-soft)]">
-                      General: {slot.title}
-                    </p>
-                  ) : (
-                    <p className="mt-2 text-sm text-[color:var(--ink-soft)]">{slot.description}</p>
-                  )}
+            return (
+              <div key={slot.id} className="flex gap-3">
+                {/* Time column */}
+                <div className={`w-14 shrink-0 pt-2.5 text-right text-xs font-semibold ${
+                  isCompleted ? "text-[color:var(--ink-soft)]/50 line-through" : isCurrent ? "text-[color:var(--crimson)]" : "text-[color:var(--ink-soft)]"
+                }`}>
+                  {slot.time.replace(":00 ", " ").replace(" AM", "a").replace(" PM", "p")}
                 </div>
-                <span className="pill">{slot.track}</span>
+
+                {/* Timeline dot + line */}
+                <div className="flex flex-col items-center">
+                  <div className={`mt-2.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full ${
+                    isCompleted
+                      ? "bg-emerald-100"
+                      : isCurrent
+                        ? "bg-[color:var(--crimson)] shadow-[0_0_0_4px_rgba(152,28,29,0.12)]"
+                        : "border-2 border-[color:var(--line)] bg-white"
+                  }`}>
+                    {isCompleted ? (
+                      <Check className="h-3 w-3 text-emerald-600" />
+                    ) : isCurrent ? (
+                      <Radio className="h-3 w-3 text-white animate-pulse" />
+                    ) : (
+                      <div className="h-1.5 w-1.5 rounded-full bg-[color:var(--ink-soft)]/30" />
+                    )}
+                  </div>
+                  {!isLast ? (
+                    <div className={`w-0.5 flex-1 ${
+                      isCompleted ? "bg-emerald-200" : "bg-[color:var(--line)]"
+                    }`} />
+                  ) : null}
+                </div>
+
+                {/* Content */}
+                <button
+                  type="button"
+                  onClick={() => setExpandedId(isExpanded ? null : slot.id)}
+                  className={`mb-1 flex-1 rounded-xl px-3 py-2 text-left transition ${
+                    isCurrent ? "bg-[rgba(152,28,29,0.04)]" : "hover:bg-white/60"
+                  }`}
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        <p className={`text-sm font-semibold truncate ${
+                          isCompleted ? "text-[color:var(--ink-soft)]/60" : "text-[color:var(--ink)]"
+                        }`}>
+                          {displayTitle}
+                        </p>
+                        {isCurrent ? (
+                          <span className="shrink-0 rounded-full bg-[color:var(--crimson)] px-2 py-0.5 text-[10px] font-bold text-white">
+                            NOW
+                          </span>
+                        ) : null}
+                      </div>
+                      <div className="mt-0.5 flex items-center gap-1 text-xs text-[color:var(--ink-soft)]">
+                        <MapPin className="h-3 w-3 shrink-0" />
+                        <span className="truncate">{displayLocation}</span>
+                        {personalized ? (
+                          <span className="ml-1 shrink-0 rounded-full bg-[rgba(152,28,29,0.1)] px-1.5 py-0.5 text-[10px] font-semibold text-[color:var(--crimson)]">
+                            Yours
+                          </span>
+                        ) : null}
+                      </div>
+                    </div>
+                    <ChevronDown className={`mt-1 h-3.5 w-3.5 shrink-0 text-[color:var(--ink-soft)] transition ${
+                      isExpanded ? "rotate-180" : ""
+                    }`} />
+                  </div>
+
+                  {isExpanded ? (
+                    <div className="mt-2 space-y-1 border-t border-[color:var(--line)] pt-2">
+                      <p className="text-xs text-[color:var(--ink-soft)]">{slot.description}</p>
+                      <span className="inline-block rounded-full border border-[color:var(--line)] px-2 py-0.5 text-[10px] font-medium text-[color:var(--ink-soft)]">
+                        {slot.track}
+                      </span>
+                      {personalized && slot.personalizedTitle && slot.personalizedTitle !== slot.title ? (
+                        <p className="text-[10px] text-[color:var(--ink-soft)]">General: {slot.title}</p>
+                      ) : null}
+                    </div>
+                  ) : null}
+                </button>
               </div>
-              <div className="mt-4 flex items-center justify-between rounded-[1.2rem] bg-[rgba(59,28,28,0.04)] px-4 py-3 text-sm">
-                <span className="inline-flex items-center gap-2 font-medium text-[color:var(--ink)]">
-                  <MapPin className="h-3.5 w-3.5 text-[color:var(--ink-soft)]" />
-                  {displayLocation}
-                </span>
-                {personalized ? (
-                  <span className="rounded-full bg-[rgba(152,28,29,0.12)] px-3 py-1 text-xs font-semibold text-[color:var(--crimson)]">
-                    Your Room
-                  </span>
-                ) : null}
-              </div>
-            </article>
-          );
-        })}
+            );
+          })}
+        </div>
       </section>
     </div>
   );
