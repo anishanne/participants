@@ -7,7 +7,7 @@ const sessionOptions = {
     process.env.SESSION_SECRET || "dev-secret-change-me-in-production-1234",
   cookieName: "smt-admin-session",
   cookieOptions: {
-    secure: process.env.NODE_ENV === "production",
+    secure: process.env.NODE_ENV === "production" && !process.env.NEXT_PUBLIC_BASE_URL?.includes("localhost"),
     httpOnly: true,
     sameSite: "lax" as const,
     maxAge: 60 * 60 * 8,

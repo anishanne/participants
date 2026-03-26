@@ -17,9 +17,7 @@ export function AnnouncementsFeed() {
           <div>
             <p className="eyebrow">Announcements</p>
             <h1 className="section-title mt-1">Tournament updates</h1>
-            <p className="body-copy mt-2">
-              Live announcements from SMT organizers. Check back for schedule changes, reminders, and event info.
-            </p>
+            <p className="body-copy mt-2">Updates from SMT organizers.</p>
           </div>
         </div>
       </section>

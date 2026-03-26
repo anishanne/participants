@@ -73,7 +73,7 @@ export function ScheduleView() {
               <p className="eyebrow">Schedule</p>
               <h1 className="section-title mt-1">SMT 2026 Tournament Day</h1>
               <p className="body-copy mt-2">
-                April 18, 2026 at Stanford University. Enter your badge number to see your room assignments.
+                Enter your badge number to see your rooms.
               </p>
             </div>
           </div>

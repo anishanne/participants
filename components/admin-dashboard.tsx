@@ -29,9 +29,6 @@ export function AdminDashboard() {
     pushEnabled: true
   });
   const deferredBody = useDeferredValue(announcement.body);
-  const supabaseReady = Boolean(
-    process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-  );
 
   async function handleCsvUpload(event: React.ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
@@ -70,30 +67,17 @@ export function AdminDashboard() {
   return (
     <div className="space-y-5">
       <section className="panel bg-[linear-gradient(145deg,rgba(74,14,14,0.96),rgba(152,28,29,0.9))] p-5 text-white">
-        <div className="space-y-3">
-          <p className="text-sm uppercase tracking-[0.28em] text-white/68">SMT 2026 Admin</p>
-          <h1 className="text-2xl font-semibold tracking-tight">Schedules, announcements, and SMS targeting.</h1>
-          <p className="max-w-md text-sm leading-6 text-white/76">
-            Demo-persistent in local storage. Structured to hand off to Supabase tables and edge functions.
-          </p>
-          <div className="flex flex-wrap gap-2">
-            <span className="pill border-white/18 bg-white/10 text-white">
-              Supabase {supabaseReady ? "connected" : "ready to wire"}
-            </span>
-            <span className="pill border-white/18 bg-white/10 text-white">Markdown preview included</span>
-            <span className="pill border-white/18 bg-white/10 text-white">Student-targeted blasts supported</span>
-          </div>
+        <div className="space-y-2">
+          <p className="text-sm uppercase tracking-[0.28em] text-white/68">SMT 2026</p>
+          <h1 className="text-2xl font-semibold tracking-tight">Admin Dashboard</h1>
         </div>
       </section>
 
       <section className="panel p-5">
         <div className="flex items-start justify-between gap-4">
           <div>
-            <p className="eyebrow">General Schedule</p>
-            <h2 className="section-title mt-1">Editable admin timeline</h2>
-            <p className="body-copy mt-2">
-              Slot slugs are what the CSV importer uses to map student-specific replacements into the right time block.
-            </p>
+            <p className="eyebrow">Schedule</p>
+            <h2 className="section-title mt-1">Tournament Day</h2>
           </div>
           <button
             type="button"
@@ -158,11 +142,10 @@ export function AdminDashboard() {
       <section className="panel p-5">
         <div className="space-y-4">
           <div>
-            <p className="eyebrow">CSV Overrides</p>
-            <h2 className="section-title mt-1">Import personalized substitutions</h2>
+            <p className="eyebrow">CSV Import</p>
+            <h2 className="section-title mt-1">Room Assignments</h2>
             <p className="body-copy mt-2">
-              Upload a CSV with `studentId` plus schedule slugs like `CheckIn`, `Power`, or any other slot slug
-              you define above.
+              Upload a CSV to assign rooms and tests per student.
             </p>
           </div>
           <label className="flex cursor-pointer items-center justify-center gap-2 rounded-[1.4rem] border border-dashed border-[rgba(220,114,145,0.28)] bg-[rgba(255,245,248,0.75)] px-4 py-6 text-sm font-medium text-[color:var(--rose)]">
@@ -178,7 +161,7 @@ export function AdminDashboard() {
         <form onSubmit={handlePublish} className="panel space-y-4 p-5">
           <div>
             <p className="eyebrow">Announcements</p>
-            <h2 className="section-title mt-1">Compose once, send through the app and SMS.</h2>
+            <h2 className="section-title mt-1">New Announcement</h2>
           </div>
           <Field
             label="Title"
@@ -233,7 +216,7 @@ export function AdminDashboard() {
           <Megaphone className="h-4 w-4 text-[color:var(--crimson)]" />
           <div>
             <p className="eyebrow">Recent Sends</p>
-            <h2 className="section-title mt-1">Published announcements</h2>
+            <h2 className="section-title mt-1">Sent</h2>
           </div>
         </div>
         <div className="mt-4 space-y-3">

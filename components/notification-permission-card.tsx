@@ -50,8 +50,7 @@ export function NotificationPermissionCard() {
             <p className="eyebrow">Push Alerts Enabled</p>
             <h2 className="text-lg font-semibold tracking-tight">You are set for tournament notifications.</h2>
             <p className="body-copy">
-              Browser permission is already granted, so announcement blasts can reach this device once delivery is wired
-              to your Supabase backend.
+              Tournament announcements will appear on this device.
             </p>
           </div>
         </div>

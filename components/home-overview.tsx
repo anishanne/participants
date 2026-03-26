@@ -652,9 +652,9 @@ function SetupChecklist() {
                   className="w-full rounded-2xl border border-[color:var(--line)] bg-white/90 px-4 py-3 text-sm text-[color:var(--ink)] outline-none transition focus:border-[color:var(--rose)]"
                   inputMode="numeric"
                 />
-                {previewCode ? (
+                {process.env.NODE_ENV === "development" && previewCode ? (
                   <p className="rounded-2xl border border-dashed border-[rgba(220,114,145,0.25)] px-3 py-2 text-xs text-[color:var(--ink-soft)]">
-                    Demo mode code: <strong>{previewCode}</strong>
+                    Dev code: <strong>{previewCode}</strong>
                   </p>
                 ) : null}
                 <button

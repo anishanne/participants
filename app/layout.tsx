@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Roboto } from "next/font/google";
 import { AppStateProvider } from "@/components/app-state-provider";
+import { OfflineBanner } from "@/components/offline-banner";
 import { PwaRegister } from "@/components/pwa-register";
 import "./globals.css";
 
@@ -11,13 +12,31 @@ const roboto = Roboto({
   display: "swap"
 });
 
+const APP_URL = "https://app.stanfordmathtournament.org";
+
 export const metadata: Metadata = {
   title: {
     default: "SMT 2026",
     template: "%s | SMT 2026"
   },
-  description: "Stanford Math Tournament 2026 — schedules, announcements, and live updates for participants.",
+  description: "Stanford Math Tournament 2026 — schedule, room assignments, and live announcements.",
   applicationName: "SMT 2026",
+  metadataBase: new URL(APP_URL),
+  openGraph: {
+    title: "SMT 2026",
+    description: "Stanford Math Tournament 2026 — schedule, room assignments, and live announcements.",
+    url: APP_URL,
+    siteName: "Stanford Math Tournament",
+    images: [{ url: "/smt-logo.png", width: 612, height: 612, alt: "SMT Logo" }],
+    locale: "en_US",
+    type: "website"
+  },
+  twitter: {
+    card: "summary",
+    title: "SMT 2026",
+    description: "Stanford Math Tournament 2026 — schedule, room assignments, and live announcements.",
+    images: ["/smt-logo.png"]
+  },
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
@@ -42,6 +61,7 @@ export default function RootLayout({
       <body>
         <AppStateProvider>
           <PwaRegister />
+          <OfflineBanner />
           {children}
         </AppStateProvider>
       </body>

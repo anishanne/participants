@@ -48,6 +48,15 @@ textarea {
 ::selection {
   background: rgba(152, 28, 29, 0.18);
 }
+
+@keyframes fade-in {
+  from { opacity: 0; transform: translateY(-8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.animate-fade-in {
+  animation: fade-in 0.3s ease-out;
+}
 @layer components {
   .panel {
     @apply rounded-panel border border-white/70 bg-white/80 shadow-lift backdrop-blur;

@@ -87,13 +87,14 @@ export async function POST(request: NextRequest) {
     };
     await session.save();
 
-    // Redirect based on status
+    // Redirect based on status (use request origin so it works on any host)
+    const origin = new URL(request.url).origin;
     if (status === "approved") {
-      return NextResponse.redirect(`${BASE_URL}/admin`, 303);
+      return NextResponse.redirect(`${origin}/admin`, 303);
     } else if (status === "denied") {
-      return NextResponse.redirect(`${BASE_URL}/admin/denied`, 303);
+      return NextResponse.redirect(`${origin}/admin/denied`, 303);
     } else {
-      return NextResponse.redirect(`${BASE_URL}/admin/pending`, 303);
+      return NextResponse.redirect(`${origin}/admin/pending`, 303);
     }
   } catch (error) {
     console.error("SAML callback error:", error);

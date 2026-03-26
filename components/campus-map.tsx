@@ -18,10 +18,7 @@ export function CampusMap() {
           </div>
           <div>
             <p className="eyebrow">Map</p>
-            <h1 className="section-title mt-1">Stanford campus — tournament venues.</h1>
-            <p className="body-copy mt-2">
-              Tap a pin to preview what happens there and where it sits on campus.
-            </p>
+            <h1 className="section-title mt-1">Stanford Campus</h1>
           </div>
         </div>
       </section>
@@ -37,9 +34,8 @@ export function CampusMap() {
               key={location.id}
               type="button"
               onClick={() => setSelectedLocationId(location.id)}
-              className={`absolute -translate-x-1/2 -translate-y-1/2 rounded-full border-4 border-white bg-[color:var(--ink)] p-2 text-white shadow-lg transition hover:scale-105 ${
-                location.id === selectedLocationId ? "scale-110 bg-[color:var(--crimson)]" : ""
-              }`}
+              className={`absolute -translate-x-1/2 -translate-y-1/2 rounded-full border-4 border-white bg-[color:var(--ink)] p-2 text-white shadow-lg transition hover:scale-105 ${location.id === selectedLocationId ? "scale-110 bg-[color:var(--crimson)]" : ""
+                }`}
               style={{ left: `${location.x}%`, top: `${location.y}%` }}
               aria-label={location.name}
             >
