@@ -20,6 +20,12 @@ export default function manifest(): MetadataRoute.Manifest {
         sizes: "180x180",
         type: "image/png"
       }
+    ],
+    related_applications: [
+      {
+        platform: "webapp",
+        url: "https://app.comp.mt/manifest.webmanifest"
+      }
     ]
   };
 }

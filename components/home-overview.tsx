@@ -454,6 +454,22 @@ function SetupChecklist() {
       updatePreferencesRef.current({ homeScreenPinned: true, installPromptDismissed: false });
     }
 
+    // Check if PWA is installed via getInstalledRelatedApps (Android)
+    async function checkInstalled() {
+      try {
+        const nav = navigator as Navigator & {
+          getInstalledRelatedApps?: () => Promise<{ platform: string }[]>;
+        };
+        if (nav.getInstalledRelatedApps) {
+          const apps = await nav.getInstalledRelatedApps();
+          if (apps.length > 0) {
+            updatePreferencesRef.current({ homeScreenPinned: true, installPromptDismissed: false });
+          }
+        }
+      } catch {}
+    }
+    checkInstalled();
+
     function handleBeforeInstallPrompt(event: Event) {
       event.preventDefault();
       setInstallEvent(event as BeforeInstallPromptEvent);

@@ -13,7 +13,7 @@ const roboto = Roboto({
   display: "swap"
 });
 
-const APP_URL = "https://app.stanfordmathtournament.org";
+const APP_URL = "https://app.comp.mt";
 
 export const metadata: Metadata = {
   title: {
