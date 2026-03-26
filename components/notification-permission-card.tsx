@@ -34,6 +34,13 @@ export function NotificationPermissionCard() {
       updatePreferences({
         notificationsEnabled: nextPermission === "granted"
       });
+
+      // Subscribe to push after permission granted
+      if (nextPermission === "granted" && "serviceWorker" in navigator) {
+        const registration = await navigator.serviceWorker.ready;
+        const { subscribeToPush } = await import("@/components/pwa-register");
+        await subscribeToPush(registration);
+      }
     } finally {
       setRequesting(false);
     }
@@ -80,7 +87,7 @@ export function NotificationPermissionCard() {
           </p>
         ) : permission === "unsupported" ? (
           <p className="rounded-2xl border border-[color:var(--line)] bg-white/70 px-4 py-3 text-sm text-[color:var(--ink-soft)]">
-            This browser does not support notification permissions.
+            Add this app to your home screen first to enable push notifications.
           </p>
         ) : (
           <button

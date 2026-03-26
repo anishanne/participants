@@ -1,5 +1,13 @@
 import { NextResponse } from "next/server";
+import twilio from "twilio";
 
+const accountSid = process.env.TWILIO_ACCOUNT_SID;
+const authToken = process.env.TWILIO_AUTH_TOKEN;
+const fromNumber = process.env.TWILIO_PHONE_NUMBER;
+
+const client = accountSid && authToken ? twilio(accountSid, authToken) : null;
+
+// In-memory store for pending verifications (use Redis/DB in scaled deployment)
 const activeVerifications = new Map<
   string,
   {
@@ -54,6 +62,28 @@ export async function POST(request: Request) {
       createdAt: Date.now()
     });
 
+    // Send SMS via Twilio (disabled until toll-free verification completes)
+    if (client && fromNumber && process.env.TWILIO_VERIFIED === "true") {
+      try {
+        await client.messages.create({
+          body: `Your SMT 2026 verification code is: ${code}`,
+          from: fromNumber,
+          to: `+1${normalized}`
+        });
+      } catch (error) {
+        console.error("Twilio SMS error:", error);
+        activeVerifications.delete(verificationId);
+        return NextResponse.json({ error: "Could not send verification text. Try again." }, { status: 500 });
+      }
+
+      return NextResponse.json({
+        verificationId,
+        phoneNumber: formatPhoneNumber(normalized),
+        delivery: "sms"
+      });
+    }
+
+    // Fallback for dev without Twilio configured
     return NextResponse.json({
       verificationId,
       phoneNumber: formatPhoneNumber(normalized),
@@ -62,6 +92,7 @@ export async function POST(request: Request) {
     });
   }
 
+  // Confirm action
   const record = activeVerifications.get(body.verificationId);
 
   if (!record) {

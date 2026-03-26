@@ -115,8 +115,11 @@ function getEventStatus(schedule: ScheduleSlot[], tournamentDate: string): Event
 export function HomeOverview() {
   const { announcements, generalSchedule, preferences, updatePreferences } = useAppState();
 
-  const setupDone =
-    preferences.homeScreenPinned && preferences.notificationsEnabled && preferences.phoneVerified;
+  const smsEnabled = process.env.NEXT_PUBLIC_SMS_ENABLED === "true";
+
+  const setupDone = smsEnabled
+    ? preferences.homeScreenPinned && preferences.notificationsEnabled && preferences.phoneVerified
+    : preferences.homeScreenPinned && preferences.notificationsEnabled;
 
   const [eventStatus, setEventStatus] = useState<EventStatus>(() =>
     getEventStatus(generalSchedule, TOURNAMENT_DATE)
@@ -157,7 +160,7 @@ export function HomeOverview() {
           <div className="flex flex-wrap gap-2">
             <StatusPill done={preferences.homeScreenPinned} label="Home screen" />
             <StatusPill done={preferences.notificationsEnabled} label="Push" />
-            <StatusPill done={preferences.phoneVerified} label="SMS" />
+            {smsEnabled ? <StatusPill done={preferences.phoneVerified} label="SMS" /> : null}
           </div>
         </div>
       </section>
@@ -463,11 +466,14 @@ function SetupChecklist() {
     setNotifPermission(Notification.permission);
   }, []);
 
-  const completedSteps = [
+  const smsEnabled = process.env.NEXT_PUBLIC_SMS_ENABLED === "true";
+  const steps = [
     preferences.homeScreenPinned,
     preferences.notificationsEnabled,
-    preferences.phoneVerified
-  ].filter(Boolean).length;
+    ...(smsEnabled ? [preferences.phoneVerified] : [])
+  ];
+  const completedSteps = steps.filter(Boolean).length;
+  const totalSteps = steps.length;
 
   async function handleInstall() {
     if (installEvent) {
@@ -489,6 +495,12 @@ function SetupChecklist() {
       const permission = await Notification.requestPermission();
       setNotifPermission(permission);
       updatePreferences({ notificationsEnabled: permission === "granted" });
+
+      if (permission === "granted" && "serviceWorker" in navigator) {
+        const registration = await navigator.serviceWorker.ready;
+        const { subscribeToPush } = await import("@/components/pwa-register");
+        await subscribeToPush(registration);
+      }
     } finally {
       setNotifRequesting(false);
     }
@@ -547,7 +559,7 @@ function SetupChecklist() {
               Get ready for tournament day
             </h2>
           </div>
-          <span className="pill">{completedSteps}/3</span>
+          <span className="pill">{completedSteps}/{totalSteps}</span>
         </div>
 
         <SetupStepRow
@@ -585,7 +597,7 @@ function SetupChecklist() {
               : notifPermission === "denied"
                 ? "Blocked in browser settings"
                 : notifPermission === "unsupported"
-                  ? "Not supported in this browser"
+                  ? "Add to home screen first"
                   : null
           }
           action={
@@ -605,81 +617,85 @@ function SetupChecklist() {
           }
         />
 
-        <SetupStepRow
-          done={preferences.phoneVerified}
-          label="Verify phone for SMS"
-          detail={
-            preferences.phoneVerified
-              ? `Texts go to ${formatDisplayPhone(preferences.phoneNumber)}`
-              : "Optional backup channel"
-          }
-          action={
-            !preferences.phoneVerified && !showPhoneFlow ? (
-              <button
-                type="button"
-                onClick={() => setShowPhoneFlow(true)}
-                className="inline-flex items-center gap-1.5 rounded-full bg-[color:var(--ink)] px-3 py-1.5 text-xs font-semibold text-white transition hover:brightness-110"
-              >
-                <MessageSquareText className="h-3 w-3" />
-                Verify
-              </button>
-            ) : null
-          }
-        />
+        {smsEnabled ? (
+          <>
+            <SetupStepRow
+              done={preferences.phoneVerified}
+              label="Verify phone for SMS"
+              detail={
+                preferences.phoneVerified
+                  ? `Texts go to ${formatDisplayPhone(preferences.phoneNumber)}`
+                  : "Optional backup channel"
+              }
+              action={
+                !preferences.phoneVerified && !showPhoneFlow ? (
+                  <button
+                    type="button"
+                    onClick={() => setShowPhoneFlow(true)}
+                    className="inline-flex items-center gap-1.5 rounded-full bg-[color:var(--ink)] px-3 py-1.5 text-xs font-semibold text-white transition hover:brightness-110"
+                  >
+                    <MessageSquareText className="h-3 w-3" />
+                    Verify
+                  </button>
+                ) : null
+              }
+            />
 
-        {showPhoneFlow && !preferences.phoneVerified ? (
-          <div className="space-y-3 rounded-[1.4rem] border border-[rgba(220,114,145,0.18)] bg-[rgba(255,245,248,0.84)] p-4">
-            <label className="block space-y-2">
-              <span className="text-sm font-medium text-[color:var(--ink)]">Mobile Number</span>
-              <input
-                value={phoneNumber}
-                onChange={(event) => setPhoneNumber(formatPhone(event.target.value))}
-                placeholder="(555) 555-5555"
-                className="w-full rounded-2xl border border-[color:var(--line)] bg-white/85 px-4 py-3 text-sm text-[color:var(--ink)] outline-none transition focus:border-[color:var(--crimson)]"
-                inputMode="numeric"
-              />
-            </label>
-            {verificationId ? (
-              <div className="space-y-3">
-                <div className="flex items-center gap-2 text-sm font-medium text-[color:var(--rose)]">
-                  <SmartphoneCharging className="h-4 w-4" />
-                  Enter the verification code
-                </div>
-                <input
-                  value={code}
-                  onChange={(event) => setCode(event.target.value.replace(/\D/g, "").slice(0, 6))}
-                  placeholder="6-digit code"
-                  className="w-full rounded-2xl border border-[color:var(--line)] bg-white/90 px-4 py-3 text-sm text-[color:var(--ink)] outline-none transition focus:border-[color:var(--rose)]"
-                  inputMode="numeric"
-                />
-                {process.env.NODE_ENV === "development" && previewCode ? (
-                  <p className="rounded-2xl border border-dashed border-[rgba(220,114,145,0.25)] px-3 py-2 text-xs text-[color:var(--ink-soft)]">
-                    Dev code: <strong>{previewCode}</strong>
-                  </p>
+            {showPhoneFlow && !preferences.phoneVerified ? (
+              <div className="space-y-3 rounded-[1.4rem] border border-[rgba(220,114,145,0.18)] bg-[rgba(255,245,248,0.84)] p-4">
+                <label className="block space-y-2">
+                  <span className="text-sm font-medium text-[color:var(--ink)]">Mobile Number</span>
+                  <input
+                    value={phoneNumber}
+                    onChange={(event) => setPhoneNumber(formatPhone(event.target.value))}
+                    placeholder="(555) 555-5555"
+                    className="w-full rounded-2xl border border-[color:var(--line)] bg-white/85 px-4 py-3 text-sm text-[color:var(--ink)] outline-none transition focus:border-[color:var(--crimson)]"
+                    inputMode="numeric"
+                  />
+                </label>
+                {verificationId ? (
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-2 text-sm font-medium text-[color:var(--rose)]">
+                      <SmartphoneCharging className="h-4 w-4" />
+                      Enter the verification code
+                    </div>
+                    <input
+                      value={code}
+                      onChange={(event) => setCode(event.target.value.replace(/\D/g, "").slice(0, 6))}
+                      placeholder="6-digit code"
+                      className="w-full rounded-2xl border border-[color:var(--line)] bg-white/90 px-4 py-3 text-sm text-[color:var(--ink)] outline-none transition focus:border-[color:var(--rose)]"
+                      inputMode="numeric"
+                    />
+                    {process.env.NODE_ENV === "development" && previewCode ? (
+                      <p className="rounded-2xl border border-dashed border-[rgba(220,114,145,0.25)] px-3 py-2 text-xs text-[color:var(--ink-soft)]">
+                        Dev code: <strong>{previewCode}</strong>
+                      </p>
+                    ) : null}
+                    <button
+                      type="button"
+                      onClick={confirmPhoneVerification}
+                      disabled={phonePending || code.length < 6}
+                      className="inline-flex w-full items-center justify-center rounded-2xl bg-[color:var(--rose)] px-4 py-3 text-sm font-semibold text-white transition hover:brightness-105 disabled:opacity-70"
+                    >
+                      {phonePending ? "Verifying..." : "Confirm Number"}
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={startPhoneVerification}
+                    disabled={phonePending || phoneNumber.replace(/\D/g, "").length < 10}
+                    className="inline-flex w-full items-center justify-center rounded-2xl bg-[color:var(--ink)] px-4 py-3 text-sm font-semibold text-white transition hover:brightness-110 disabled:opacity-70"
+                  >
+                    {phonePending ? "Sending Code..." : "Send Verification Code"}
+                  </button>
+                )}
+                {phoneError ? (
+                  <p className="text-sm text-[color:var(--crimson)]">{phoneError}</p>
                 ) : null}
-                <button
-                  type="button"
-                  onClick={confirmPhoneVerification}
-                  disabled={phonePending || code.length < 6}
-                  className="inline-flex w-full items-center justify-center rounded-2xl bg-[color:var(--rose)] px-4 py-3 text-sm font-semibold text-white transition hover:brightness-105 disabled:opacity-70"
-                >
-                  {phonePending ? "Verifying..." : "Confirm Number"}
-                </button>
               </div>
-            ) : (
-              <button
-                type="button"
-                onClick={startPhoneVerification}
-                disabled={phonePending || phoneNumber.replace(/\D/g, "").length < 10}
-                className="inline-flex w-full items-center justify-center rounded-2xl bg-[color:var(--ink)] px-4 py-3 text-sm font-semibold text-white transition hover:brightness-110 disabled:opacity-70"
-              >
-                {phonePending ? "Sending Code..." : "Send Verification Code"}
-              </button>
-            )}
-            {phoneError ? (
-              <p className="text-sm text-[color:var(--crimson)]">{phoneError}</p>
             ) : null}
-          </div>
+          </>
         ) : null}
       </div>
     </section>

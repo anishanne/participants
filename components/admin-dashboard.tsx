@@ -47,7 +47,7 @@ export function AdminDashboard() {
     );
   }
 
-  function handlePublish(event: React.FormEvent<HTMLFormElement>) {
+  async function handlePublish(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
     publishAnnouncement({
@@ -56,6 +56,22 @@ export function AdminDashboard() {
       smsEnabled: announcement.smsEnabled,
       pushEnabled: announcement.pushEnabled
     });
+
+    // Send push notifications
+    if (announcement.pushEnabled) {
+      try {
+        await fetch("/api/push/send", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            title: announcement.title,
+            body: announcement.body.replace(/[*#`_~\[\]]/g, "").slice(0, 200)
+          })
+        });
+      } catch {
+        // Push send is best-effort
+      }
+    }
 
     setAnnouncement((current) => ({
       ...current,
@@ -176,17 +192,19 @@ export function AdminDashboard() {
               className="min-h-44 w-full rounded-2xl border border-[color:var(--line)] bg-white/85 px-4 py-3 text-sm text-[color:var(--ink)] outline-none transition focus:border-[color:var(--crimson)]"
             />
           </label>
-          <div className="grid grid-cols-2 gap-3">
+          <div className={`grid gap-3 ${process.env.NEXT_PUBLIC_SMS_ENABLED === "true" ? "grid-cols-2" : "grid-cols-1"}`}>
             <ToggleRow
               label="Send Push"
               checked={announcement.pushEnabled}
               onChange={(checked) => setAnnouncement((current) => ({ ...current, pushEnabled: checked }))}
             />
-            <ToggleRow
-              label="Send SMS"
-              checked={announcement.smsEnabled}
-              onChange={(checked) => setAnnouncement((current) => ({ ...current, smsEnabled: checked }))}
-            />
+            {process.env.NEXT_PUBLIC_SMS_ENABLED === "true" ? (
+              <ToggleRow
+                label="Send SMS"
+                checked={announcement.smsEnabled}
+                onChange={(checked) => setAnnouncement((current) => ({ ...current, smsEnabled: checked }))}
+              />
+            ) : null}
           </div>
           <button
             type="submit"
