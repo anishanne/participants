@@ -40,9 +40,6 @@ export function AnnouncementsFeed() {
               <div className="markdown mt-3">
                 <ReactMarkdown>{announcement.body}</ReactMarkdown>
               </div>
-              <p className="mt-4 border-t border-[color:var(--line)] pt-3 text-xs text-[color:var(--ink-soft)]">
-                {announcement.author}
-              </p>
             </article>
           ))}
         </section>
