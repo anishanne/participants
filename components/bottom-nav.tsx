@@ -32,7 +32,7 @@ export function BottomNav() {
   const pathname = usePathname();
 
   return (
-    <nav className="fixed bottom-0 left-1/2 z-30 mb-4 w-[calc(100%-1.5rem)] max-w-md -translate-x-1/2 rounded-[1.9rem] border border-white/80 bg-[rgba(74,14,14,0.92)] px-2 py-2 shadow-lift backdrop-blur">
+    <nav className="fixed bottom-0 left-1/2 z-30 mb-[max(1rem,env(safe-area-inset-bottom))] w-[calc(100%-1.5rem)] max-w-md -translate-x-1/2 rounded-[1.9rem] border border-white/80 bg-[rgba(74,14,14,0.92)] px-2 py-2 shadow-lift backdrop-blur">
       <ul className="grid grid-cols-4 gap-1">
         {navItems.map((item) => {
           const Icon = item.icon;

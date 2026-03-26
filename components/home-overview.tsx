@@ -158,10 +158,11 @@ export function HomeOverview() {
             </p>
           </div>
           <Countdown targetDate={TOURNAMENT_DATE} />
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <StatusPill done={preferences.homeScreenPinned} label="Home screen" />
             <StatusPill done={preferences.notificationsEnabled} label="Push" />
             {smsEnabled ? <StatusPill done={preferences.phoneVerified} label="SMS" /> : null}
+            {preferences.notificationsEnabled ? <TestPushPill /> : null}
           </div>
         </div>
       </section>
@@ -602,9 +603,7 @@ function SetupChecklist() {
                   : null
           }
           action={
-            preferences.notificationsEnabled ? (
-              <TestPushButton />
-            ) : !preferences.notificationsEnabled &&
+            !preferences.notificationsEnabled &&
             notifPermission !== "denied" &&
             notifPermission !== "unsupported" ? (
               <button
@@ -742,15 +741,14 @@ function SetupStepRow({
   );
 }
 
-/* ---------- Test push button ---------- */
+/* ---------- Test push pill ---------- */
 
-function TestPushButton() {
+function TestPushPill() {
   const [state, setState] = useState<"idle" | "sending" | "sent" | "error">("idle");
 
   async function sendTest() {
     setState("sending");
     try {
-      // Trigger a local notification via the service worker directly
       const registration = await navigator.serviceWorker.ready;
       await registration.showNotification("SMT 2026", {
         body: "Push notifications are working!",
@@ -771,10 +769,10 @@ function TestPushButton() {
       type="button"
       onClick={sendTest}
       disabled={state === "sending"}
-      className="inline-flex items-center gap-1.5 rounded-full border border-[color:var(--line)] px-3 py-1.5 text-xs font-medium text-[color:var(--ink)] transition hover:bg-white disabled:opacity-70"
+      className="pill border-white/15 bg-white/10 text-white transition hover:bg-white/20 disabled:opacity-70"
     >
       <BellRing className="h-3 w-3" />
-      {state === "sending" ? "Sending..." : state === "sent" ? "Sent!" : state === "error" ? "Failed" : "Test"}
+      {state === "sent" ? "Sent!" : state === "error" ? "Failed" : "Test push"}
     </button>
   );
 }
