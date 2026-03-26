@@ -17,7 +17,6 @@ import {
 } from "@/lib/demo-data";
 import type {
   Announcement,
-  AnnouncementDraft,
   CsvImportResult,
   MapLocation,
   ParticipantPreferences,
@@ -38,7 +37,6 @@ interface AppStateContextValue {
   personalizedOverrides: StudentScheduleOverrides;
   importOverrideCsv: (csvText: string) => CsvImportResult;
   announcements: Announcement[];
-  publishAnnouncement: (draft: AnnouncementDraft) => void;
   refreshAnnouncements: () => Promise<void>;
   mapLocations: MapLocation[];
 }
@@ -99,8 +97,8 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     async function loadFromDb() {
       try {
-        const { getSupabase } = await import("@/lib/supabase-server");
-        const supabase = getSupabase();
+        const { getSupabaseClient } = await import("@/lib/supabase-client");
+        const supabase = getSupabaseClient();
         if (!supabase) return;
 
         const [scheduleRes, announcementsRes] = await Promise.all([
@@ -125,8 +123,8 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 
   const refreshAnnouncements = useCallback(async () => {
     try {
-      const { getSupabase } = await import("@/lib/supabase-server");
-      const supabase = getSupabase();
+      const { getSupabaseClient } = await import("@/lib/supabase-client");
+      const supabase = getSupabaseClient();
       if (!supabase) return;
 
       const { data } = await supabase
@@ -223,35 +221,6 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     return summary;
   }
 
-  function publishAnnouncement(draft: AnnouncementDraft) {
-    const newAnnouncement: Announcement = {
-      id: crypto.randomUUID(),
-      title: draft.title.trim(),
-      body: draft.body.trim(),
-      createdAt: new Date().toISOString(),
-      author: "Admin",
-      smsEnabled: draft.smsEnabled,
-      pushEnabled: draft.pushEnabled
-    };
-
-    startTransition(() => {
-      setAnnouncements((current) => [newAnnouncement, ...current]);
-    });
-
-    // Persist to Supabase
-    import("@/lib/supabase-server").then(({ getSupabase }) => {
-      const supabase = getSupabase();
-      if (!supabase) return;
-      supabase.from("announcements").insert({
-        title: newAnnouncement.title,
-        body_markdown: newAnnouncement.body,
-        sms_enabled: newAnnouncement.smsEnabled,
-        push_enabled: newAnnouncement.pushEnabled,
-        audience_mode: "all",
-        author_name: newAnnouncement.author
-      });
-    });
-  }
 
   return (
     <AppStateContext.Provider
@@ -265,7 +234,6 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
         personalizedOverrides,
         importOverrideCsv,
         announcements,
-        publishAnnouncement,
         refreshAnnouncements,
         mapLocations: MAP_LOCATIONS
       }}

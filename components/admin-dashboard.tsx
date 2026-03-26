@@ -17,7 +17,7 @@ export function AdminDashboard() {
     addScheduleSlot,
     announcements,
     generalSchedule,
-    publishAnnouncement,
+    refreshAnnouncements,
     removeScheduleSlot,
     updateScheduleSlot
   } = useAppState();
@@ -27,39 +27,42 @@ export function AdminDashboard() {
     smsEnabled: true,
     pushEnabled: true
   });
+  const [publishing, setPublishing] = useState(false);
   const deferredBody = useDeferredValue(announcement.body);
 
   async function handlePublish(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    setPublishing(true);
 
-    publishAnnouncement({
-      title: announcement.title,
-      body: announcement.body,
-      smsEnabled: announcement.smsEnabled,
-      pushEnabled: announcement.pushEnabled
-    });
+    try {
+      const response = await fetch("/api/admin/announce", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: announcement.title,
+          body: announcement.body,
+          pushEnabled: announcement.pushEnabled,
+          smsEnabled: announcement.smsEnabled
+        })
+      });
 
-    // Send push notifications
-    if (announcement.pushEnabled) {
-      try {
-        await fetch("/api/push/send", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            title: announcement.title,
-            body: announcement.body.replace(/[*#`_~\[\]]/g, "").slice(0, 200)
-          })
-        });
-      } catch {
-        // Push send is best-effort
+      if (!response.ok) {
+        const data = await response.json();
+        console.error("Publish failed:", data.error);
+        return;
       }
-    }
 
-    setAnnouncement((current) => ({
-      ...current,
-      title: "",
-      body: defaultAnnouncementBody
-    }));
+      // Refresh announcements from DB
+      await refreshAnnouncements();
+
+      setAnnouncement((current) => ({
+        ...current,
+        title: "",
+        body: defaultAnnouncementBody
+      }));
+    } finally {
+      setPublishing(false);
+    }
   }
 
   return (
@@ -174,10 +177,11 @@ export function AdminDashboard() {
           </div>
           <button
             type="submit"
-            className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-[color:var(--crimson)] px-4 py-3 text-sm font-semibold text-white transition hover:brightness-105"
+            disabled={publishing}
+            className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-[color:var(--crimson)] px-4 py-3 text-sm font-semibold text-white transition hover:brightness-105 disabled:opacity-70"
           >
             <SendHorizonal className="h-4 w-4" />
-            Publish Announcement
+            {publishing ? "Publishing..." : "Publish Announcement"}
           </button>
         </form>
 
