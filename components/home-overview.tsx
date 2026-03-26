@@ -229,6 +229,14 @@ export function HomeOverview() {
           </div>
         </div>
       </section>
+
+      {/* Contact */}
+      <a
+        href="mailto:info@stanfordmathtournament.org"
+        className="block text-center text-xs text-[color:var(--ink-soft)] transition hover:text-[color:var(--ink)]"
+      >
+        Need help? Contact info@stanfordmathtournament.org
+      </a>
     </div>
   );
 }

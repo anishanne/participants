@@ -110,9 +110,14 @@ export function ScheduleView() {
 
           {/* Not found */}
           {lookupError && preferences.studentId ? (
-            <p className="rounded-[1.2rem] border border-[rgba(152,28,29,0.15)] bg-[rgba(152,28,29,0.04)] px-4 py-3 text-sm text-[color:var(--crimson)]">
-              No student found for badge &ldquo;{preferences.studentId}&rdquo;
-            </p>
+            <div className="rounded-[1.2rem] border border-[rgba(152,28,29,0.15)] bg-[rgba(152,28,29,0.04)] px-4 py-3">
+              <p className="text-sm text-[color:var(--crimson)]">
+                No student found for badge &ldquo;{preferences.studentId}&rdquo;
+              </p>
+              <a href="mailto:info@stanfordmathtournament.org" className="mt-1 block text-xs text-[color:var(--ink-soft)] hover:underline">
+                Need help? Contact info@stanfordmathtournament.org
+              </a>
+            </div>
           ) : null}
 
           <div className="inline-flex rounded-full border border-[color:var(--line)] bg-white/85 p-1">

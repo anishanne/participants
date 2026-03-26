@@ -24,9 +24,15 @@ export default async function AdminDeniedPage() {
             Access Denied
           </h1>
           <p className="text-sm text-[color:var(--ink-soft)]">
-            Your admin access request was denied. Contact the tournament organizers if you believe this is an error.
+            Your admin access request was denied.
           </p>
         </div>
+        <a
+          href="mailto:info@stanfordmathtournament.org"
+          className="inline-flex w-full items-center justify-center rounded-2xl bg-[color:var(--crimson)] px-4 py-3 text-sm font-semibold text-white transition hover:brightness-105"
+        >
+          Contact Us
+        </a>
         <a
           href="/api/auth/logout"
           className="inline-flex w-full items-center justify-center rounded-2xl border border-[color:var(--line)] px-4 py-3 text-sm font-medium text-[color:var(--ink)] transition hover:bg-white/90"

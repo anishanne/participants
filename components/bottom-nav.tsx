@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { BellRing, LayoutDashboard, MapPinned, Sparkles } from "lucide-react";
+import { BellRing, LayoutDashboard, Mail, MapPinned, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const navItems = [
@@ -25,6 +25,11 @@ const navItems = [
     href: "/map",
     label: "Map",
     icon: MapPinned
+  },
+  {
+    href: "mailto:info@stanfordmathtournament.org",
+    label: "Help",
+    icon: Mail
   }
 ];
 
@@ -33,14 +38,17 @@ export function BottomNav() {
 
   return (
     <nav className="fixed bottom-0 left-1/2 z-30 mb-[max(1rem,env(safe-area-inset-bottom))] w-[calc(100%-1.5rem)] max-w-md -translate-x-1/2 rounded-[1.9rem] border border-white/80 bg-[rgba(74,14,14,0.92)] px-2 py-2 shadow-lift backdrop-blur">
-      <ul className="grid grid-cols-4 gap-1">
+      <ul className="grid grid-cols-5 gap-1">
         {navItems.map((item) => {
           const Icon = item.icon;
           const active = pathname === item.href;
 
+          const isExternal = item.href.startsWith("mailto:");
+          const Component = isExternal ? "a" : Link;
+
           return (
             <li key={item.href}>
-              <Link
+              <Component
                 href={item.href}
                 className={cn(
                   "flex flex-col items-center justify-center rounded-2xl px-1 py-2 text-[10px] font-medium text-white/80 transition hover:text-white",
@@ -49,7 +57,7 @@ export function BottomNav() {
               >
                 <Icon className={cn("mb-1 h-5 w-5", active && "scale-110")} />
                 <span>{item.label}</span>
-              </Link>
+              </Component>
             </li>
           );
         })}
