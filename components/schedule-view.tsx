@@ -171,7 +171,9 @@ export function ScheduleView() {
               className="w-full rounded-xl border border-[color:var(--line)] bg-white/85 px-3 py-2.5 text-sm text-[color:var(--ink)] outline-none transition focus:border-[color:var(--crimson)]"
             />
             {loading ? (
-              <Loader2 className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-[color:var(--ink-soft)]" />
+              <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                <Loader2 className="h-4 w-4 animate-spin text-[color:var(--ink-soft)]" />
+              </div>
             ) : null}
           </div>
 
@@ -211,15 +213,12 @@ export function ScheduleView() {
       <section className="panel px-4 py-3">
         <div className="relative">
           {appLoading ? (
-            <>
-              {Array.from({ length: 10 }).map((_, i) => (
-                <SkeletonTimelineRow key={i} isLast={i === 5} />
-              ))}
-            </>
+            Array.from({ length: 6 }).map((_, i) => (
+              <SkeletonTimelineRow key={i} isLast={i === 5} />
+            ))
           ) : displayedSlots.length === 0 ? (
             <p className="py-4 text-center text-sm text-[color:var(--ink-soft)]">No schedule loaded.</p>
-          ) : null}
-          {displayedSlots.map((slot, i) => {
+          ) : displayedSlots.map((slot, i) => {
             const nextSlot = i + 1 < displayedSlots.length ? displayedSlots[i + 1] : null;
             const status = getSlotStatus(slot, nextSlot, tournamentDate);
             const isLast = i === displayedSlots.length - 1;
