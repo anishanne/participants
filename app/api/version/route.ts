@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 
-// Set at module load time — changes on each server restart / deploy
-const BUILD_ID = process.env.BUILD_ID || Date.now().toString();
+// Injected at build time by next.config.ts generateBuildId — stable per deploy
+const BUILD_ID = process.env.BUILD_ID || process.env.NEXT_DEPLOYMENT_ID || "__dev__";
 
 export async function GET() {
   return NextResponse.json(

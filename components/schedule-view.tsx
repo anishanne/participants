@@ -47,11 +47,15 @@ function getSlotStatus(
   return "upcoming";
 }
 
+// Cache lookup results across re-mounts (tab switches)
+const lookupCache = new Map<string, StudentLookupResult>();
+
 export function ScheduleView() {
   const { generalSchedule, loading: appLoading, tournamentDate } = useParticipantData();
   const { preferences, updatePreferences } = useParticipantPreferences();
   const [mode, setMode] = useState<"personalized" | "general">("personalized");
-  const [lookupResult, setLookupResult] = useState<StudentLookupResult | null>(null);
+  const cachedResult = preferences.studentId ? lookupCache.get(preferences.studentId.toUpperCase()) ?? null : null;
+  const [lookupResult, setLookupResult] = useState<StudentLookupResult | null>(cachedResult);
   const [lookupError, setLookupError] = useState(false);
   const [loading, setLoading] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -69,12 +73,22 @@ export function ScheduleView() {
       setLookupError(false);
       return;
     }
+    // Use cache if available
+    const cached = lookupCache.get(badge.toUpperCase());
+    if (cached) {
+      setLookupResult(cached);
+      setLookupError(false);
+      return;
+    }
     setLoading(true);
     setLookupError(false);
     try {
       const res = await fetch(`/api/student/${encodeURIComponent(badge)}`);
       if (!res.ok) { setLookupResult(null); setLookupError(true); return; }
       const result = await res.json();
+      if (result) {
+        lookupCache.set(badge.toUpperCase(), result);
+      }
       setLookupResult(result);
       setLookupError(!result);
     } catch {
@@ -269,11 +283,6 @@ export function ScheduleView() {
                       <div className="mt-0.5 flex items-center gap-1 text-xs text-[color:var(--ink-soft)]">
                         <MapPin className="h-3 w-3 shrink-0" />
                         <span className="truncate">{displayLocation}</span>
-                        {personalized ? (
-                          <span className="ml-1 shrink-0 rounded-full bg-[rgba(152,28,29,0.1)] px-1.5 py-0.5 text-[10px] font-semibold text-[color:var(--crimson)]">
-                            Yours
-                          </span>
-                        ) : null}
                       </div>
                     </div>
                     <ChevronDown className={`mt-1 h-3.5 w-3.5 shrink-0 text-[color:var(--ink-soft)] transition ${isExpanded ? "rotate-180" : ""
