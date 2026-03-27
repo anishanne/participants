@@ -1,7 +1,10 @@
 .next
+.next-dev
+.next-prod
 node_modules
 .DS_Store
 .env.local
 dist
 coverage
+tsconfig.tsbuildinfo
 supabase/.temp
