@@ -10,6 +10,7 @@ import {
 } from "react";
 import { TOURNAMENT_DATE } from "@/lib/config";
 import { MAP_LOCATIONS } from "@/lib/demo-data";
+import { mapScheduleRow } from "@/lib/schedule";
 import type {
   Announcement,
   MapLocation,
@@ -19,29 +20,28 @@ import type {
 
 const PREFS_KEY = "smt-user-prefs";
 
-interface AppStateContextValue {
+interface ParticipantPreferencesContextValue {
   preferences: ParticipantPreferences;
   updatePreferences: (patch: Partial<ParticipantPreferences>) => void;
+}
+
+interface ParticipantDataContextValue {
   generalSchedule: ScheduleSlot[];
-  addScheduleSlot: () => void;
-  removeScheduleSlot: (slotId: string) => void;
-  updateScheduleSlot: (slotId: string, patch: Partial<ScheduleSlot>) => void;
   announcements: Announcement[];
-  refreshAnnouncements: () => Promise<void>;
   tournamentDate: string;
   loading: boolean;
   mapLocations: MapLocation[];
 }
 
-const AppStateContext = createContext<AppStateContextValue | null>(null);
+const ParticipantPreferencesContext = createContext<ParticipantPreferencesContextValue | null>(null);
+const ParticipantDataContext = createContext<ParticipantDataContextValue | null>(null);
 
 const DEFAULT_PREFERENCES: ParticipantPreferences = {
   studentId: "",
   phoneNumber: "",
   phoneVerified: false,
   notificationsEnabled: false,
-  homeScreenPinned: false,
-  installPromptDismissed: false
+  homeScreenPinned: false
 };
 
 export function AppStateProvider({ children }: { children: ReactNode }) {
@@ -51,7 +51,24 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
   const [dataLoading, setDataLoading] = useState(true);
   const [hydrated, setHydrated] = useState(false);
 
-  // Load user prefs from localStorage (only studentId + dismissals — not shared data)
+  const refreshSchedule = useCallback(async () => {
+    try {
+      const res = await fetch("/api/schedule");
+      if (!res.ok) return;
+      const data = await res.json();
+      setGeneralSchedule(Array.isArray(data) ? data.map(mapScheduleRow) : []);
+    } catch {}
+  }, []);
+
+  const refreshAnnouncements = useCallback(async () => {
+    try {
+      const res = await fetch("/api/announcements");
+      if (!res.ok) return;
+      const data = await res.json();
+      setAnnouncements(Array.isArray(data) ? data.map(mapDbAnnouncement) : []);
+    } catch {}
+  }, []);
+
   useEffect(() => {
     try {
       const raw = window.localStorage.getItem(PREFS_KEY);
@@ -74,166 +91,66 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     setHydrated(true);
   }, []);
 
-  // Persist only user prefs to localStorage
   useEffect(() => {
     if (!hydrated) return;
     window.localStorage.setItem(PREFS_KEY, JSON.stringify({
       studentId: preferences.studentId,
       phoneNumber: preferences.phoneNumber,
-      phoneVerified: preferences.phoneVerified,
-      installPromptDismissed: preferences.installPromptDismissed
+      phoneVerified: preferences.phoneVerified
     }));
   }, [hydrated, preferences]);
 
-  // Load schedule + announcements from API on mount
   useEffect(() => {
     async function loadFromApi() {
       try {
-        const [scheduleRes, announcementsRes] = await Promise.all([
-          fetch("/api/schedule"),
-          fetch("/api/announcements")
-        ]);
-
-        if (scheduleRes.ok) {
-          const data = await scheduleRes.json();
-          if (Array.isArray(data) && data.length > 0) {
-            setGeneralSchedule(data.map(mapDbSlot));
-          }
-        }
-
-        if (announcementsRes.ok) {
-          const data = await announcementsRes.json();
-          if (Array.isArray(data) && data.length > 0) {
-            setAnnouncements(data.map(mapDbAnnouncement));
-          }
-        }
-
-      } catch {
-        // API unavailable — keep defaults
+        await Promise.all([refreshSchedule(), refreshAnnouncements()]);
       } finally {
         setDataLoading(false);
       }
     }
 
     loadFromApi();
-  }, []);
-
-  const refreshAnnouncements = useCallback(async () => {
-    try {
-      const res = await fetch("/api/announcements");
-      if (!res.ok) return;
-      const data = await res.json();
-      if (Array.isArray(data) && data.length > 0) {
-        setAnnouncements(data.map(mapDbAnnouncement));
-      }
-    } catch {}
-  }, []);
+  }, [refreshAnnouncements, refreshSchedule]);
 
   function updatePreferences(patch: Partial<ParticipantPreferences>) {
     setPreferences((current) => ({ ...current, ...patch }));
   }
 
-  function addScheduleSlot() {
-    const nextIndex = generalSchedule.length + 1;
-    const newSlot: ScheduleSlot = {
-      id: `slot_${crypto.randomUUID()}`,
-      slug: `CustomSlot${nextIndex}`,
-      time: "6:00 PM",
-      title: "New Schedule Item",
-      location: "TBD",
-      description: "",
-      track: "Custom"
-    };
-
-    setGeneralSchedule((current) => [...current, newSlot]);
-
-    fetch("/api/admin/schedule", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        slug: newSlot.slug,
-        title: newSlot.title,
-        location: newSlot.location,
-        description: newSlot.description,
-        track: newSlot.track,
-        sort_order: nextIndex
-      })
-    }).catch(() => {});
-  }
-
-  function removeScheduleSlot(slotId: string) {
-    setGeneralSchedule((current) => current.filter((slot) => slot.id !== slotId));
-
-    fetch("/api/admin/schedule", {
-      method: "DELETE",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id: slotId })
-    }).catch(() => {});
-  }
-
-  function updateScheduleSlot(slotId: string, patch: Partial<ScheduleSlot>) {
-    setGeneralSchedule((current) =>
-      current.map((slot) => (slot.id === slotId ? { ...slot, ...patch } : slot))
-    );
-
-    fetch("/api/admin/schedule", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id: slotId, ...patch })
-    }).catch(() => {});
-  }
-
   return (
-    <AppStateContext.Provider
-      value={{
-        preferences,
-        updatePreferences,
-        generalSchedule,
-        addScheduleSlot,
-        removeScheduleSlot,
-        updateScheduleSlot,
-        announcements,
-        refreshAnnouncements,
-        tournamentDate: TOURNAMENT_DATE,
-        loading: dataLoading,
-        mapLocations: MAP_LOCATIONS
-      }}
-    >
-      {children}
-    </AppStateContext.Provider>
+    <ParticipantPreferencesContext.Provider value={{ preferences, updatePreferences }}>
+      <ParticipantDataContext.Provider
+        value={{
+          generalSchedule,
+          announcements,
+          tournamentDate: TOURNAMENT_DATE,
+          loading: dataLoading,
+          mapLocations: MAP_LOCATIONS
+        }}
+      >
+        {children}
+      </ParticipantDataContext.Provider>
+    </ParticipantPreferencesContext.Provider>
   );
 }
 
-export function useAppState() {
-  const context = useContext(AppStateContext);
+export function useParticipantPreferences() {
+  const context = useContext(ParticipantPreferencesContext);
 
   if (!context) {
-    throw new Error("useAppState must be used within AppStateProvider");
+    throw new Error("useParticipantPreferences must be used within AppStateProvider");
   }
 
   return context;
 }
 
-// Map Supabase row shapes to app types
-function mapDbSlot(row: Record<string, unknown>): ScheduleSlot {
-  const startsAt = new Date(row.starts_at as string);
-  // Force PST display
-  const pst = new Date(startsAt.toLocaleString("en-US", { timeZone: "America/Los_Angeles" }));
-  const hours = pst.getHours();
-  const minutes = pst.getMinutes();
-  const period = hours >= 12 ? "PM" : "AM";
-  const displayHours = hours === 0 ? 12 : hours > 12 ? hours - 12 : hours;
-  const time = `${displayHours}:${String(minutes).padStart(2, "0")} ${period}`;
+export function useParticipantData() {
+  const context = useContext(ParticipantDataContext);
 
-  return {
-    id: row.id as string,
-    slug: row.slug as string,
-    time,
-    title: row.title as string,
-    location: row.location as string,
-    description: row.description as string,
-    track: row.track as string
-  };
+  if (!context) {
+    throw new Error("useParticipantData must be used within AppStateProvider");
+  }
+
+  return context;
 }
 
 function mapDbAnnouncement(row: Record<string, unknown>): Announcement {

@@ -2,10 +2,10 @@
 
 import { Compass, MapPin } from "lucide-react";
 import { useState } from "react";
-import { useAppState } from "@/components/app-state-provider";
+import { useParticipantData } from "@/components/app-state-provider";
 
 export function CampusMap() {
-  const { mapLocations } = useAppState();
+  const { mapLocations } = useParticipantData();
   const [selectedLocationId, setSelectedLocationId] = useState(mapLocations[0]?.id ?? "");
   const selectedLocation = mapLocations.find((location) => location.id === selectedLocationId) ?? mapLocations[0];
 

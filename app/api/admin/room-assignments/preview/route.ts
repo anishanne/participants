@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { isApprovedAdmin } from "@/lib/admin-session";
 import { getSupabase } from "@/lib/supabase-server";
-import { autoMatchColumns } from "@/lib/csv-import";
+import { autoMatchColumns, getMappingOptions } from "@/lib/csv-import";
 
 export async function POST(request: Request) {
   if (!await isApprovedAdmin()) {
@@ -21,15 +21,11 @@ export async function POST(request: Request) {
   const scheduleSlots = (slots ?? []).map((s: Record<string, unknown>) => ({
     id: s.id as string,
     slug: s.slug as string,
-    title: s.title as string,
-    time: "",
-    location: "",
-    description: "",
-    track: ""
+    title: s.title as string
   }));
 
   const mappings = autoMatchColumns(headers, scheduleSlots);
-  const availableSlugs = scheduleSlots.map((s) => ({ slug: s.slug, title: s.title, id: s.id }));
+  const options = getMappingOptions(scheduleSlots);
 
-  return NextResponse.json({ mappings, availableSlugs });
+  return NextResponse.json({ mappings, options });
 }

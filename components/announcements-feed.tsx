@@ -2,11 +2,11 @@
 
 import ReactMarkdown from "react-markdown";
 import { BellRing } from "lucide-react";
-import { useAppState } from "@/components/app-state-provider";
+import { useParticipantData } from "@/components/app-state-provider";
 import { SkeletonAnnouncementCard } from "@/components/skeleton";
 
 export function AnnouncementsFeed() {
-  const { announcements, loading } = useAppState();
+  const { announcements, loading } = useParticipantData();
 
   return (
     <div className="space-y-5">

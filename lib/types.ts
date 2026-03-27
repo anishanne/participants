@@ -4,18 +4,22 @@ export interface ParticipantPreferences {
   phoneVerified: boolean;
   notificationsEnabled: boolean;
   homeScreenPinned: boolean;
-  installPromptDismissed: boolean;
 }
 
 export interface ScheduleSlot {
   id: string;
   slug: string;
+  startsAt: string;
   time: string;
   title: string;
   location: string;
   description: string;
   track: string;
 }
+
+export type ScheduleSlotPatch = Partial<
+  Pick<ScheduleSlot, "slug" | "startsAt" | "title" | "location" | "description" | "track">
+>;
 
 export interface ResolvedScheduleSlot extends ScheduleSlot {
   personalizedTitle?: string;
@@ -29,13 +33,6 @@ export interface Announcement {
   body: string;
   createdAt: string;
   author: string;
-  smsEnabled: boolean;
-  pushEnabled: boolean;
-}
-
-export interface AnnouncementDraft {
-  title: string;
-  body: string;
   smsEnabled: boolean;
   pushEnabled: boolean;
 }

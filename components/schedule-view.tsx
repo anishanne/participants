@@ -2,10 +2,13 @@
 
 import { CalendarRange, Check, ChevronDown, Loader2, MapPin, Radio, Sparkles, User } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
-import { useAppState } from "@/components/app-state-provider";
+import {
+  useParticipantData,
+  useParticipantPreferences
+} from "@/components/app-state-provider";
 import { SkeletonTimelineRow } from "@/components/skeleton";
-
 import { isTodayPST, parsePST } from "@/lib/config";
+import { formatScheduleTimeCompact } from "@/lib/schedule";
 import type { ResolvedScheduleSlot } from "@/lib/types";
 
 interface StudentLookupResult {
@@ -17,30 +20,26 @@ interface StudentLookupResult {
   overrides: Record<string, { title?: string; location?: string }>;
 }
 
-function parseTime(timeStr: string, tournamentDate: string): Date {
-  const match = timeStr.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
-  if (!match) return parsePST(tournamentDate);
-  let hours = parseInt(match[1], 10);
-  const minutes = parseInt(match[2], 10);
-  const period = match[3].toUpperCase();
-  if (period === "PM" && hours !== 12) hours += 12;
-  if (period === "AM" && hours === 12) hours = 0;
-  const hh = String(hours).padStart(2, "0");
-  const mm = String(minutes).padStart(2, "0");
-  return parsePST(`${tournamentDate}T${hh}:${mm}:00`);
+function slotTimeToday(startsAt: string, tournamentDate: string): Date {
+  const original = new Date(startsAt);
+  const todayBase = parsePST(tournamentDate);
+  const pstStr = original.toLocaleString("en-US", { timeZone: "America/Los_Angeles", hour12: false, hour: "2-digit", minute: "2-digit" });
+  const [hours, minutes] = pstStr.split(":").map(Number);
+  todayBase.setHours(hours, minutes, 0, 0);
+  return todayBase;
 }
 
 function getSlotStatus(
-  slot: { time: string },
-  nextSlot: { time: string } | null,
+  slot: { startsAt: string },
+  nextSlot: { startsAt: string } | null,
   tournamentDate: string
 ): "completed" | "current" | "upcoming" | "none" {
   if (!tournamentDate || !isTodayPST(tournamentDate)) return "none";
   const now = new Date();
 
-  const start = parseTime(slot.time, tournamentDate);
+  const start = slotTimeToday(slot.startsAt, tournamentDate);
   const end = nextSlot
-    ? parseTime(nextSlot.time, tournamentDate)
+    ? slotTimeToday(nextSlot.startsAt, tournamentDate)
     : new Date(start.getTime() + 90 * 60 * 1000);
 
   if (now >= end) return "completed";
@@ -49,7 +48,8 @@ function getSlotStatus(
 }
 
 export function ScheduleView() {
-  const { generalSchedule, loading: appLoading, preferences, updatePreferences, tournamentDate } = useAppState();
+  const { generalSchedule, loading: appLoading, tournamentDate } = useParticipantData();
+  const { preferences, updatePreferences } = useParticipantPreferences();
   const [mode, setMode] = useState<"personalized" | "general">("personalized");
   const [lookupResult, setLookupResult] = useState<StudentLookupResult | null>(null);
   const [lookupError, setLookupError] = useState(false);
@@ -221,7 +221,7 @@ export function ScheduleView() {
                 {/* Time column */}
                 <div className={`w-14 shrink-0 pt-2.5 text-right text-xs font-semibold ${isCompleted ? "text-[color:var(--ink-soft)]/50 line-through" : isCurrent ? "text-[color:var(--crimson)]" : "text-[color:var(--ink-soft)]"
                   }`}>
-                  {slot.time.replace(":00 ", " ").replace(" AM", "a").replace(" PM", "p")}
+                  {formatScheduleTimeCompact(slot.startsAt)}
                 </div>
 
                 {/* Timeline dot + line */}

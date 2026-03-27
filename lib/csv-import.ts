@@ -1,11 +1,16 @@
-import type { ScheduleSlot } from "@/lib/types";
+type SlotInfo = { id: string; slug: string; title: string };
 
+/**
+ * Target format:
+ * - "badge_number", "student_name", "name_abbreviated", "team_name", "team_number" — metadata
+ * - "{slug}:room" — replacement_location for a schedule slot
+ * - "{slug}:name" — replacement_title for a schedule slot
+ * - "skip" — ignore this column
+ */
 export interface ColumnMapping {
   csvColumn: string;
-  mappedSlugs: string[];
-  confidence: "auto" | "partial" | "none";
-  isMeta: boolean;
-  isTests: boolean;
+  targets: string[];
+  confidence: "high" | "medium" | "none";
 }
 
 export interface MetadataRow {
@@ -24,8 +29,11 @@ export interface OverrideRow {
   replacement_location: string | null;
 }
 
-const META_MAP: Record<string, string> = {
+const META_FIELDS: Record<string, string> = {
   number: "badge_number",
+  badgenumber: "badge_number",
+  badge_number: "badge_number",
+  badge: "badge_number",
   studentname: "student_name",
   student_name: "student_name",
   nameabbreviated: "name_abbreviated",
@@ -36,28 +44,13 @@ const META_MAP: Record<string, string> = {
   team_number: "team_number",
 };
 
-const SKIP_PREFIXES = ["customfield", "mergeddoc", "linkto", "document", "registeredat"];
-const SKIP_EXACT = new Set([
-  "student_id", "front_id", "waiver", "email", "first_name", "last_name",
-  "team_id", "org_name", "org_id",
-]);
-
 function normalize(s: string): string {
   return s.toLowerCase().replace(/[^a-z0-9]/g, "");
 }
 
-function isSkipColumn(col: string): boolean {
-  const n = normalize(col);
-  if (SKIP_EXACT.has(n)) return true;
-  for (const prefix of SKIP_PREFIXES) {
-    if (n.startsWith(prefix)) return true;
-  }
-  return false;
-}
-
 export function autoMatchColumns(
   headers: string[],
-  slots: ScheduleSlot[]
+  slots: SlotInfo[]
 ): ColumnMapping[] {
   const slugByToken = new Map<string, string>();
   for (const slot of slots) {
@@ -68,66 +61,92 @@ export function autoMatchColumns(
   return headers.map((col) => {
     const n = normalize(col);
 
-    // Meta columns
-    if (META_MAP[n] || col === "number") {
-      return { csvColumn: col, mappedSlugs: [], confidence: "auto", isMeta: true, isTests: false };
+    // Meta field match
+    const metaField = META_FIELDS[n];
+    if (metaField) {
+      return { csvColumn: col, targets: [metaField], confidence: "high" as const };
     }
 
-    // Tests column
+    // Tests
     if (n === "customfieldtests" || n === "tests") {
-      return { csvColumn: col, mappedSlugs: [], confidence: "auto", isMeta: false, isTests: true };
+      const subjectSlot = slots.find((s) => normalize(s.slug).includes("subject") || normalize(s.title).includes("subject"));
+      if (subjectSlot) {
+        return { csvColumn: col, targets: [`${subjectSlot.slug}:name`], confidence: "high" as const };
+      }
     }
 
-    // Skip non-useful columns
-    if (isSkipColumn(col)) {
-      return { csvColumn: col, mappedSlugs: [], confidence: "none", isMeta: false, isTests: false };
-    }
-
-    // Direct match
+    // Direct slug match → room
     const directMatch = slugByToken.get(n);
     if (directMatch) {
-      return { csvColumn: col, mappedSlugs: [directMatch], confidence: "auto", isMeta: false, isTests: false };
+      return { csvColumn: col, targets: [`${directMatch}:room`], confidence: "high" as const };
     }
 
-    // Partial match (e.g., "PowerTeam" contains "Power" and "Team")
+    // Partial match — collect ALL matching slugs (e.g., "OpeningAwards" → Opening + Awards)
     const partialMatches: string[] = [];
     for (const slot of slots) {
       const slugToken = normalize(slot.slug);
       if (slugToken.length >= 3 && n.includes(slugToken)) {
-        partialMatches.push(slot.slug);
+        partialMatches.push(`${slot.slug}:room`);
       }
     }
     if (partialMatches.length > 0) {
-      return { csvColumn: col, mappedSlugs: partialMatches, confidence: "partial", isMeta: false, isTests: false };
+      return { csvColumn: col, targets: partialMatches, confidence: "medium" as const };
     }
 
-    return { csvColumn: col, mappedSlugs: [], confidence: "none", isMeta: false, isTests: false };
+    // Column name contains "subject" or "test" + "room" → subject room
+    if ((n.includes("subject") || n.includes("test")) && (n.includes("room") || n.includes("location"))) {
+      const subjectSlot = slots.find((s) => normalize(s.slug).includes("subject"));
+      if (subjectSlot) {
+        return { csvColumn: col, targets: [`${subjectSlot.slug}:room`], confidence: "medium" as const };
+      }
+    }
+
+    return { csvColumn: col, targets: [], confidence: "none" as const };
   });
+}
+
+/** Build all dropdown options for the mapping UI */
+export function getMappingOptions(slots: SlotInfo[]): { value: string; label: string; group: string }[] {
+  const options: { value: string; label: string; group: string }[] = [
+    { value: "badge_number", label: "Badge Number", group: "Student Info" },
+    { value: "student_name", label: "Student Name", group: "Student Info" },
+    { value: "name_abbreviated", label: "Name (abbreviated)", group: "Student Info" },
+    { value: "team_name", label: "Team Name", group: "Student Info" },
+    { value: "team_number", label: "Team Number", group: "Student Info" },
+  ];
+
+  for (const slot of slots) {
+    options.push(
+      { value: `${slot.slug}:room`, label: `${slot.title} → Room`, group: "Schedule Slots" },
+      { value: `${slot.slug}:name`, label: `${slot.title} → Name`, group: "Schedule Slots" }
+    );
+  }
+
+  options.push({ value: "skip", label: "Skip (ignore)", group: "Other" });
+
+  return options;
 }
 
 export function processImportRows(
   rows: Record<string, string>[],
   mappings: ColumnMapping[],
-  slots: ScheduleSlot[]
+  slots: SlotInfo[]
 ): { metadata: MetadataRow[]; overrides: OverrideRow[] } {
-  const slotById = new Map(slots.map((s) => [s.slug, s.id]));
-  const subjectSlugIds = slots
-    .filter((s) => normalize(s.slug).includes("subject") || normalize(s.title).includes("subject"))
-    .map((s) => ({ slug: s.slug, id: s.id }));
+  const slotIdBySlug = new Map(slots.map((s) => [s.slug, s.id]));
 
-  const badgeCol = mappings.find((m) => m.isMeta && normalize(m.csvColumn) === "number")?.csvColumn ?? "number";
-  const metaMappings = mappings.filter((m) => m.isMeta);
-  const roomMappings = mappings.filter((m) => !m.isMeta && !m.isTests && m.mappedSlugs.length > 0);
-  const testsMapping = mappings.find((m) => m.isTests);
+  // Group mappings by type
+  const badgeCol = mappings.find((m) => m.targets.includes("badge_number"))?.csvColumn;
+  if (!badgeCol) return { metadata: [], overrides: [] };
+
+  const metaTargets = new Set(["badge_number", "student_name", "name_abbreviated", "team_name", "team_number"]);
 
   const metadata: MetadataRow[] = [];
   const overrides: OverrideRow[] = [];
 
   for (const row of rows) {
-    const badge = (row[badgeCol] ?? "").trim();
+    const badge = (row[badgeCol] ?? "").trim().toUpperCase();
     if (!badge) continue;
 
-    // Build metadata
     const meta: MetadataRow = {
       badge_number: badge,
       student_name: "",
@@ -137,58 +156,48 @@ export function processImportRows(
       tests: ""
     };
 
-    for (const m of metaMappings) {
-      const val = (row[m.csvColumn] ?? "").trim();
-      const field = META_MAP[normalize(m.csvColumn)];
-      if (field && val) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (meta as any)[field] = val;
-      }
-    }
+    const slotOverrides = new Map<string, { title: string | null; location: string | null }>();
 
-    // Tests
-    if (testsMapping) {
-      meta.tests = (row[testsMapping.csvColumn] ?? "").trim();
+    for (const mapping of mappings) {
+      const val = (row[mapping.csvColumn] ?? "").trim();
+      if (!val || mapping.targets.length === 0) continue;
+
+      for (const target of mapping.targets) {
+        // Meta field
+        if (metaTargets.has(target)) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          (meta as any)[target] = val;
+          continue;
+        }
+
+        // Slot mapping: "Power:room" or "Subject1:name"
+        const colonIdx = target.indexOf(":");
+        if (colonIdx === -1) continue;
+
+        const slug = target.substring(0, colonIdx);
+        const field = target.substring(colonIdx + 1);
+        const slotId = slotIdBySlug.get(slug);
+        if (!slotId) continue;
+
+        const existing = slotOverrides.get(slotId) ?? { title: null, location: null };
+        if (field === "room") existing.location = val;
+        if (field === "name") {
+          existing.title = val;
+          if (!meta.tests && val) meta.tests = val;
+        }
+        slotOverrides.set(slotId, existing);
+      }
     }
 
     metadata.push(meta);
 
-    // Room overrides
-    for (const rm of roomMappings) {
-      const val = (row[rm.csvColumn] ?? "").trim();
-      if (!val) continue;
-
-      for (const slug of rm.mappedSlugs) {
-        const slotId = slotById.get(slug);
-        if (!slotId) continue;
-        overrides.push({
-          student_id: badge,
-          schedule_slot_id: slotId,
-          replacement_title: null,
-          replacement_location: val
-        });
-      }
-    }
-
-    // Test names → Subject slot titles
-    if (meta.tests && subjectSlugIds.length > 0) {
-      const parts = meta.tests.split("+").map((s) => s.trim()).filter(Boolean);
-      for (let i = 0; i < Math.min(parts.length, subjectSlugIds.length); i++) {
-        // Find if there's already an override for this slot
-        const existing = overrides.find(
-          (o) => o.student_id === badge && o.schedule_slot_id === subjectSlugIds[i].id
-        );
-        if (existing) {
-          existing.replacement_title = parts[i];
-        } else {
-          overrides.push({
-            student_id: badge,
-            schedule_slot_id: subjectSlugIds[i].id,
-            replacement_title: parts[i],
-            replacement_location: null
-          });
-        }
-      }
+    for (const [slotId, override] of slotOverrides) {
+      overrides.push({
+        student_id: badge,
+        schedule_slot_id: slotId,
+        replacement_title: override.title,
+        replacement_location: override.location
+      });
     }
   }
 

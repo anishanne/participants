@@ -7,6 +7,7 @@ const CHECK_INTERVAL = 30_000;
 
 export function UpdateBanner() {
   const [updateAvailable, setUpdateAvailable] = useState(false);
+  const isDev = process.env.NODE_ENV !== "production";
 
   const doRefresh = useCallback(() => {
     if ("serviceWorker" in navigator) {
@@ -20,6 +21,8 @@ export function UpdateBanner() {
   }, []);
 
   useEffect(() => {
+    if (isDev) return;
+
     let initialBuildId: string | null = null;
 
     async function checkForUpdate() {

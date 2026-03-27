@@ -3,9 +3,18 @@
 import ReactMarkdown from "react-markdown";
 import { AlertTriangle, Check, Loader2, Megaphone, Pencil, Plus, SendHorizonal, Trash2, WandSparkles, X } from "lucide-react";
 import { useCallback, useDeferredValue, useEffect, useState } from "react";
-import { useAppState } from "@/components/app-state-provider";
 import { RoomAssignments } from "@/components/room-assignments";
 import { SkeletonScheduleSlot } from "@/components/skeleton";
+import { TOURNAMENT_DATE } from "@/lib/config";
+import {
+  applySchedulePatch,
+  createScheduleStartsAt,
+  formatScheduleTime,
+  mapScheduleRow,
+  toScheduleApiPatch,
+  toScheduleTimeInputValue
+} from "@/lib/schedule";
+import type { ScheduleSlot, ScheduleSlotPatch } from "@/lib/types";
 
 const defaultAnnouncementBody = `## Tournament update
 
@@ -13,16 +22,108 @@ const defaultAnnouncementBody = `## Tournament update
 - Use targeted blasts for student-specific reroutes
 - Toggle SMS when the update matters away from the app`;
 
+function useAdminSchedule() {
+  const [generalSchedule, setGeneralSchedule] = useState<ScheduleSlot[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const refreshSchedule = useCallback(async () => {
+    try {
+      const res = await fetch("/api/schedule");
+      if (!res.ok) return;
+      const data = await res.json();
+      setGeneralSchedule(Array.isArray(data) ? data.map(mapScheduleRow) : []);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void refreshSchedule();
+  }, [refreshSchedule]);
+
+  function addScheduleSlot() {
+    const nextIndex = generalSchedule.length + 1;
+    const startsAt = createScheduleStartsAt(TOURNAMENT_DATE, "18:00") ?? new Date().toISOString();
+    const tempId = `slot_${crypto.randomUUID()}`;
+    const newSlot: ScheduleSlot = {
+      id: tempId,
+      slug: `CustomSlot${nextIndex}`,
+      startsAt,
+      time: formatScheduleTime(startsAt),
+      title: "New Schedule Item",
+      location: "TBD",
+      description: "",
+      track: "Custom"
+    };
+
+    setGeneralSchedule((current) => [...current, newSlot]);
+
+    fetch("/api/admin/schedule", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        slug: newSlot.slug,
+        starts_at: newSlot.startsAt,
+        title: newSlot.title,
+        location: newSlot.location,
+        description: newSlot.description,
+        track: newSlot.track,
+        sort_order: nextIndex
+      })
+    })
+      .then(async (res) => {
+        if (!res.ok) throw new Error("Failed to create schedule slot");
+        await refreshSchedule();
+      })
+      .catch(() => {
+        setGeneralSchedule((current) => current.filter((slot) => slot.id !== tempId));
+        void refreshSchedule();
+      });
+  }
+
+  function removeScheduleSlot(slotId: string) {
+    setGeneralSchedule((current) => current.filter((slot) => slot.id !== slotId));
+
+    fetch("/api/admin/schedule", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: slotId })
+    }).catch(() => {
+      void refreshSchedule();
+    });
+  }
+
+  function updateScheduleSlot(slotId: string, patch: ScheduleSlotPatch) {
+    setGeneralSchedule((current) =>
+      current.map((slot) => (slot.id === slotId ? applySchedulePatch(slot, patch) : slot))
+    );
+
+    fetch("/api/admin/schedule", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: slotId, ...toScheduleApiPatch(patch) })
+    }).catch(() => {
+      void refreshSchedule();
+    });
+  }
+
+  return {
+    addScheduleSlot,
+    generalSchedule,
+    loading,
+    removeScheduleSlot,
+    updateScheduleSlot
+  };
+}
+
 export function AdminDashboard() {
   const {
     addScheduleSlot,
-    announcements,
     generalSchedule,
     loading: appLoading,
-    refreshAnnouncements,
     removeScheduleSlot,
     updateScheduleSlot
-  } = useAppState();
+  } = useAdminSchedule();
   const [announcement, setAnnouncement] = useState({
     title: "New announcement",
     body: defaultAnnouncementBody,
@@ -55,8 +156,6 @@ export function AdminDashboard() {
         return;
       }
 
-      // Refresh both contexts
-      await refreshAnnouncements();
       setSentReloadKey((k) => k + 1);
 
       setAnnouncement((current) => ({
@@ -103,10 +202,14 @@ export function AdminDashboard() {
           {generalSchedule.map((slot) => (
             <article key={slot.id} className="rounded-[1.5rem] border border-[color:var(--line)] bg-white/75 p-4">
               <div className="grid gap-3 grid-cols-2 lg:grid-cols-3">
-                <Field
-                  label="Time"
-                  value={slot.time}
-                  onChange={(value) => updateScheduleSlot(slot.id, { time: value })}
+                <TimeField
+                  label="Start (PT)"
+                  value={toScheduleTimeInputValue(slot.startsAt)}
+                  onChange={(value) => {
+                    const startsAt = createScheduleStartsAt(TOURNAMENT_DATE, value);
+                    if (!startsAt) return;
+                    updateScheduleSlot(slot.id, { startsAt });
+                  }}
                 />
                 <Field
                   label="Slug"
@@ -150,7 +253,7 @@ export function AdminDashboard() {
         </div>
       </section>
 
-      <RoomAssignments />
+      <RoomAssignments scheduleSlots={generalSchedule} />
 
       <section className="grid gap-5 lg:grid-cols-[1.05fr_0.95fr]">
         <form onSubmit={handlePublish} className="panel space-y-4 p-5">
@@ -211,6 +314,29 @@ export function AdminDashboard() {
 
       <SentAnnouncements reloadKey={sentReloadKey} />
     </div>
+  );
+}
+
+function TimeField({
+  label,
+  onChange,
+  value
+}: {
+  label: string;
+  onChange: (value: string) => void;
+  value: string;
+}) {
+  return (
+    <label className="block space-y-2">
+      <span className="text-sm font-medium text-[color:var(--ink)]">{label}</span>
+      <input
+        type="time"
+        step={60}
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        className="w-full rounded-2xl border border-[color:var(--line)] bg-white/85 px-4 py-3 text-sm text-[color:var(--ink)] outline-none transition focus:border-[color:var(--crimson)]"
+      />
+    </label>
   );
 }
 

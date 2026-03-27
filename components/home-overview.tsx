@@ -16,7 +16,10 @@ import {
   SmartphoneCharging
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { useAppState } from "@/components/app-state-provider";
+import {
+  useParticipantData,
+  useParticipantPreferences
+} from "@/components/app-state-provider";
 import { SkeletonAnnouncementCard, SkeletonEventCard } from "@/components/skeleton";
 import { isTodayPST, parsePST } from "@/lib/config";
 import type { ScheduleSlot } from "@/lib/types";
@@ -58,19 +61,6 @@ function getTimeLeft(targetDate: string) {
   };
 }
 
-function parseScheduleTime(timeStr: string, tournamentDate: string): Date {
-  const match = timeStr.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
-  if (!match) return parsePST(tournamentDate);
-  let hours = parseInt(match[1], 10);
-  const minutes = parseInt(match[2], 10);
-  const period = match[3].toUpperCase();
-  if (period === "PM" && hours !== 12) hours += 12;
-  if (period === "AM" && hours === 12) hours = 0;
-  const hh = String(hours).padStart(2, "0");
-  const mm = String(minutes).padStart(2, "0");
-  return parsePST(`${tournamentDate}T${hh}:${mm}:00`);
-}
-
 type EventStatus =
   | { mode: "countdown" }
   | { mode: "preview"; firstSlot: ScheduleSlot }
@@ -91,13 +81,25 @@ function getEventStatus(schedule: ScheduleSlot[], tournamentDate: string): Event
   }
 
   // Tournament day — find current/next
+  // Slot startsAt may be from a different date (DB has the real tournament date).
+  // Extract the time-of-day and combine with today's date for comparison.
   if (schedule.length === 0) return { mode: "countdown" };
 
+  function slotTimeToday(startsAt: string): Date {
+    const original = new Date(startsAt);
+    const todayBase = parsePST(tournamentDate);
+    // Get hours/minutes in PST from the original timestamp
+    const pstStr = original.toLocaleString("en-US", { timeZone: "America/Los_Angeles", hour12: false, hour: "2-digit", minute: "2-digit" });
+    const [hours, minutes] = pstStr.split(":").map(Number);
+    todayBase.setHours(hours, minutes, 0, 0);
+    return todayBase;
+  }
+
   for (let i = 0; i < schedule.length; i++) {
-    const slotStart = parseScheduleTime(schedule[i].time, tournamentDate);
+    const slotStart = slotTimeToday(schedule[i].startsAt);
     const slotEnd = i + 1 < schedule.length
-      ? parseScheduleTime(schedule[i + 1].time, tournamentDate)
-      : new Date(slotStart.getTime() + 90 * 60 * 1000); // assume 90 min for last
+      ? slotTimeToday(schedule[i + 1].startsAt)
+      : new Date(slotStart.getTime() + 90 * 60 * 1000);
 
     if (now >= slotStart && now < slotEnd) {
       return {
@@ -118,7 +120,8 @@ function getEventStatus(schedule: ScheduleSlot[], tournamentDate: string): Event
 /* ---------- Main component ---------- */
 
 export function HomeOverview() {
-  const { announcements, generalSchedule, loading, preferences, updatePreferences, tournamentDate } = useAppState();
+  const { announcements, generalSchedule, loading, tournamentDate } = useParticipantData();
+  const { preferences } = useParticipantPreferences();
 
   const smsEnabled = process.env.NEXT_PUBLIC_SMS_ENABLED === "true";
 
@@ -431,7 +434,8 @@ function StatusPill({ done, label }: { done: boolean; label: string }) {
 /* ---------- Setup checklist ---------- */
 
 function SetupChecklist() {
-  const { preferences, tournamentDate, updatePreferences } = useAppState();
+  const { tournamentDate } = useParticipantData();
+  const { preferences, updatePreferences } = useParticipantPreferences();
   const [installEvent, setInstallEvent] = useState<BeforeInstallPromptEvent | null>(null);
   const [isIos, setIsIos] = useState(false);
   const [isStandalone, setIsStandalone] = useState(false);
@@ -466,7 +470,7 @@ function SetupChecklist() {
     setIsStandalone(standalone);
 
     if (standalone) {
-      updatePreferencesRef.current({ homeScreenPinned: true, installPromptDismissed: false });
+      updatePreferencesRef.current({ homeScreenPinned: true });
     }
 
     // Check if PWA is installed via getInstalledRelatedApps (Android)
@@ -478,7 +482,7 @@ function SetupChecklist() {
         if (nav.getInstalledRelatedApps) {
           const apps = await nav.getInstalledRelatedApps();
           if (apps.length > 0) {
-            updatePreferencesRef.current({ homeScreenPinned: true, installPromptDismissed: false });
+            updatePreferencesRef.current({ homeScreenPinned: true });
           }
         }
       } catch {}
@@ -491,7 +495,7 @@ function SetupChecklist() {
     }
 
     function handleInstalled() {
-      updatePreferencesRef.current({ homeScreenPinned: true, installPromptDismissed: false });
+      updatePreferencesRef.current({ homeScreenPinned: true });
     }
 
     window.addEventListener("beforeinstallprompt", handleBeforeInstallPrompt);
@@ -525,7 +529,7 @@ function SetupChecklist() {
       await installEvent.prompt();
       const choice = await installEvent.userChoice;
       if (choice.outcome === "accepted") {
-        updatePreferences({ homeScreenPinned: true, installPromptDismissed: false });
+        updatePreferences({ homeScreenPinned: true });
       }
     }
   }

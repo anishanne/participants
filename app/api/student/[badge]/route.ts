@@ -21,6 +21,13 @@ export async function GET(
 
   if (!meta) return NextResponse.json(null);
 
+  // Mark that this student looked up their schedule
+  supabase
+    .from("student_metadata")
+    .update({ last_looked_up: new Date().toISOString() })
+    .eq("badge_number", upperBadge)
+    .then(() => {});
+
   // Get overrides joined with schedule slot slugs
   const { data: overrideRows } = await supabase
     .from("student_schedule_overrides")

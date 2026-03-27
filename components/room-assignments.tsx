@@ -15,12 +15,12 @@ import {
   X
 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
-import { useAppState } from "@/components/app-state-provider";
 import type { ColumnMapping } from "@/lib/csv-import";
+import type { ScheduleSlot } from "@/lib/types";
 
 type Tab = "browse" | "upload";
 
-export function RoomAssignments() {
+export function RoomAssignments({ scheduleSlots }: { scheduleSlots: ScheduleSlot[] }) {
   const [tab, setTab] = useState<Tab>("browse");
 
   return (
@@ -46,7 +46,7 @@ export function RoomAssignments() {
           ))}
         </div>
 
-        {tab === "upload" ? <UploadTab /> : <BrowseTab />}
+        {tab === "upload" ? <UploadTab /> : <BrowseTab scheduleSlots={scheduleSlots} />}
       </div>
     </section>
   );
@@ -54,15 +54,19 @@ export function RoomAssignments() {
 
 /* ========== Upload Tab ========== */
 
-interface SlugOption { slug: string; title: string; id: string }
+interface MappingOption { value: string; label: string; group: string }
 
 function UploadTab() {
   const [parsedRows, setParsedRows] = useState<Record<string, string>[]>([]);
-  const [headers, setHeaders] = useState<string[]>([]);
   const [mappings, setMappings] = useState<ColumnMapping[]>([]);
-  const [availableSlugs, setAvailableSlugs] = useState<SlugOption[]>([]);
+  const [options, setOptions] = useState<MappingOption[]>([]);
   const [phase, setPhase] = useState<"select" | "map" | "importing" | "done">("select");
-  const [result, setResult] = useState<{ importedStudents: number; overridesCreated: number } | null>(null);
+  const [result, setResult] = useState<{
+    importedStudents: number;
+    overridesCreated: number;
+    studentsRemoved: number;
+    overridesRemoved: number;
+  } | null>(null);
   const [error, setError] = useState("");
 
   function handleFileSelect(event: React.ChangeEvent<HTMLInputElement>) {
@@ -72,8 +76,6 @@ function UploadTab() {
     file.text().then((text) => {
       const parsed = Papa.parse<Record<string, string>>(text, { header: true, skipEmptyLines: true });
       setParsedRows(parsed.data);
-      setHeaders(parsed.meta.fields ?? []);
-      // Send headers to server for auto-matching
       fetch("/api/admin/room-assignments/preview", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -82,22 +84,38 @@ function UploadTab() {
         .then((res) => res.json())
         .then((data) => {
           setMappings(data.mappings);
-          setAvailableSlugs(data.availableSlugs);
+          setOptions(data.options);
           setPhase("map");
         })
-        .catch(() => setError("Failed to preview CSV"));
+        .catch(() => setError("Failed to process CSV"));
     });
   }
 
-  function updateMapping(csvColumn: string, slugs: string[]) {
+  function setTargets(csvColumn: string, targets: string[]) {
     setMappings((prev) =>
-      prev.map((m) =>
-        m.csvColumn === csvColumn ? { ...m, mappedSlugs: slugs, confidence: "auto" } : m
-      )
+      prev.map((m) => m.csvColumn === csvColumn ? { ...m, targets, confidence: "high" as const } : m)
+    );
+  }
+
+  function addTarget(csvColumn: string, target: string) {
+    setMappings((prev) =>
+      prev.map((m) => m.csvColumn === csvColumn ? { ...m, targets: [...m.targets, target], confidence: "high" as const } : m)
+    );
+  }
+
+  function removeTarget(csvColumn: string, target: string) {
+    setMappings((prev) =>
+      prev.map((m) => m.csvColumn === csvColumn ? { ...m, targets: m.targets.filter((t) => t !== target) } : m)
     );
   }
 
   async function confirmImport() {
+    const hasBadge = mappings.some((m) => m.targets.includes("badge_number"));
+    if (!hasBadge) {
+      setError("You must map one column to Badge Number.");
+      return;
+    }
+
     setPhase("importing");
     setError("");
     try {
@@ -112,13 +130,25 @@ function UploadTab() {
         setPhase("map");
         return;
       }
-      const data = await res.json();
-      setResult(data);
+      setResult(await res.json());
       setPhase("done");
     } catch {
       setError("Import failed");
       setPhase("map");
     }
+  }
+
+  // Get sample values for a column (first 3 non-empty)
+  function getSamples(col: string): string[] {
+    const samples: string[] = [];
+    for (const row of parsedRows) {
+      const val = (row[col] ?? "").trim();
+      if (val && !samples.includes(val)) {
+        samples.push(val);
+        if (samples.length >= 3) break;
+      }
+    }
+    return samples;
   }
 
   if (phase === "done" && result) {
@@ -130,9 +160,14 @@ function UploadTab() {
         <p className="text-sm font-semibold text-[color:var(--ink)]">
           Imported {result.importedStudents} students with {result.overridesCreated} room assignments
         </p>
+        {result.studentsRemoved > 0 || result.overridesRemoved > 0 ? (
+          <p className="text-xs text-[color:var(--ink-soft)]">
+            Removed {result.studentsRemoved} students and {result.overridesRemoved} stale overrides.
+          </p>
+        ) : null}
         <button
           type="button"
-          onClick={() => { setPhase("select"); setParsedRows([]); setHeaders([]); setMappings([]); setResult(null); }}
+          onClick={() => { setPhase("select"); setParsedRows([]); setMappings([]); setResult(null); }}
           className="text-xs text-[color:var(--crimson)] hover:underline"
         >
           Upload another
@@ -151,21 +186,57 @@ function UploadTab() {
   }
 
   if (phase === "map") {
-    const roomMappings = mappings.filter((m) => !m.isMeta && !m.isTests && m.confidence !== "none");
-    const metaMappings = mappings.filter((m) => m.isMeta);
-    const testsMappings = mappings.filter((m) => m.isTests);
-    const skippedCount = mappings.filter((m) => m.confidence === "none" && !m.isMeta && !m.isTests).length;
+    const hasBadge = mappings.some((m) => m.targets.includes("badge_number"));
+    const mappedCount = mappings.filter((m) => m.targets.length > 0).length;
+    const skippedCount = mappings.filter((m) => m.targets.length === 0).length;
+
+    // Detect duplicate meta mappings (badge_number, student_name etc. should only appear once)
+    const metaFields = new Set(["badge_number", "student_name", "name_abbreviated", "team_name", "team_number"]);
+    const metaCounts = new Map<string, string[]>();
+    for (const m of mappings) {
+      for (const t of m.targets) {
+        if (!metaFields.has(t)) continue;
+        const list = metaCounts.get(t) ?? [];
+        list.push(m.csvColumn);
+        metaCounts.set(t, list);
+      }
+    }
+    const duplicates = new Map<string, string[]>();
+    for (const [target, cols] of metaCounts) {
+      if (cols.length > 1) duplicates.set(target, cols);
+    }
+    const hasDuplicates = duplicates.size > 0;
+
+    // Group options for the select
+    const groupedOptions = new Map<string, MappingOption[]>();
+    for (const opt of options) {
+      const list = groupedOptions.get(opt.group) ?? [];
+      list.push(opt);
+      groupedOptions.set(opt.group, list);
+    }
+
+    const canImport = hasBadge && !hasDuplicates;
 
     return (
       <div className="space-y-4">
         <div className="flex items-center justify-between">
-          <p className="text-sm font-medium text-[color:var(--ink)]">
-            {parsedRows.length} rows &middot; {headers.length} columns &middot; {skippedCount} skipped
-          </p>
+          <div>
+            <p className="text-sm font-medium text-[color:var(--ink)]">
+              {parsedRows.length} rows &middot; {mappedCount} mapped &middot; {skippedCount} skipped
+            </p>
+            {!hasBadge ? (
+              <p className="text-xs text-[color:var(--crimson)]">A Badge Number column is required</p>
+            ) : null}
+            {hasDuplicates ? (
+              <p className="text-xs text-[color:var(--crimson)]">
+                Duplicate mapping: {Array.from(duplicates.entries()).map(([t, cols]) => `"${cols.join("\" and \"")}" both map to ${t}`).join("; ")}
+              </p>
+            ) : null}
+          </div>
           <div className="flex gap-2">
             <button
               type="button"
-              onClick={() => { setPhase("select"); setParsedRows([]); }}
+              onClick={() => { setPhase("select"); setParsedRows([]); setMappings([]); }}
               className="inline-flex items-center gap-1 rounded-full border border-[color:var(--line)] px-3 py-1.5 text-xs font-medium text-[color:var(--ink-soft)]"
             >
               <X className="h-3 w-3" /> Cancel
@@ -173,86 +244,87 @@ function UploadTab() {
             <button
               type="button"
               onClick={confirmImport}
-              className="inline-flex items-center gap-1 rounded-full bg-[color:var(--crimson)] px-4 py-1.5 text-xs font-semibold text-white hover:brightness-105"
+              disabled={!canImport}
+              className="inline-flex items-center gap-1 rounded-full bg-[color:var(--crimson)] px-4 py-1.5 text-xs font-semibold text-white hover:brightness-105 disabled:opacity-50"
             >
-              <Upload className="h-3 w-3" /> Confirm Import
+              <Upload className="h-3 w-3" /> Import
             </button>
           </div>
         </div>
 
         {error ? <p className="text-xs text-[color:var(--crimson)]">{error}</p> : null}
 
-        {/* Meta columns */}
-        {metaMappings.length > 0 ? (
-          <div className="space-y-1">
-            <p className="text-xs font-semibold text-[color:var(--ink-soft)]">Metadata columns</p>
-            {metaMappings.map((m) => (
-              <div key={m.csvColumn} className="flex items-center gap-2 rounded-lg bg-white/50 px-3 py-2 text-xs">
-                <span className="font-medium text-[color:var(--ink)]">{m.csvColumn}</span>
-                <span className="rounded-full bg-[rgba(59,28,28,0.06)] px-2 py-0.5 text-[color:var(--ink-soft)]">Metadata</span>
-              </div>
-            ))}
-          </div>
-        ) : null}
+        {/* Mapping table */}
+        <div className="space-y-1.5">
+          {mappings.map((m) => {
+            const samples = getSamples(m.csvColumn);
+            const isSkip = m.targets.length === 0;
+            const hasDuplicateTarget = m.targets.some((t) => duplicates.has(t));
 
-        {/* Tests */}
-        {testsMappings.map((m) => (
-          <div key={m.csvColumn} className="flex items-center gap-2 rounded-lg bg-white/50 px-3 py-2 text-xs">
-            <span className="font-medium text-[color:var(--ink)]">{m.csvColumn}</span>
-            <span className="rounded-full bg-[rgba(220,114,145,0.1)] px-2 py-0.5 text-[color:var(--rose)]">Tests → Subject slots</span>
-          </div>
-        ))}
-
-        {/* Room column mappings */}
-        <div className="space-y-1">
-          <p className="text-xs font-semibold text-[color:var(--ink-soft)]">Room columns</p>
-          {roomMappings.map((m) => (
-            <div key={m.csvColumn} className="flex items-center gap-2 rounded-lg border border-[color:var(--line)] bg-white/60 px-3 py-2 text-xs">
-              <span className="w-32 shrink-0 font-medium text-[color:var(--ink)] truncate">{m.csvColumn}</span>
-              <span className="text-[color:var(--ink-soft)]">→</span>
-              <div className="flex flex-wrap gap-1 flex-1">
-                {m.mappedSlugs.map((slug) => (
-                  <span key={slug} className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-emerald-700">
-                    {slug}
-                    <button
-                      type="button"
-                      onClick={() => updateMapping(m.csvColumn, m.mappedSlugs.filter((s) => s !== slug))}
-                      className="hover:text-emerald-900"
-                    >
-                      <X className="h-2.5 w-2.5" />
-                    </button>
-                  </span>
-                ))}
-              </div>
-              <select
-                value=""
-                onChange={(e) => {
-                  if (e.target.value) updateMapping(m.csvColumn, [...m.mappedSlugs, e.target.value]);
-                }}
-                className="rounded-lg border border-[color:var(--line)] bg-white px-2 py-1 text-xs text-[color:var(--ink)]"
+            return (
+              <div
+                key={m.csvColumn}
+                className={`rounded-xl border px-3 py-2.5 ${
+                  hasDuplicateTarget
+                    ? "border-[color:var(--crimson)] bg-[rgba(152,28,29,0.04)]"
+                    : isSkip
+                      ? "border-[color:var(--line)] bg-white/30 opacity-50"
+                      : "border-emerald-200 bg-emerald-50/30"
+                }`}
               >
-                <option value="">+ Add slug</option>
-                {availableSlugs
-                  .filter((s) => !m.mappedSlugs.includes(s.slug))
-                  .map((s) => (
-                    <option key={s.slug} value={s.slug}>{s.slug} ({s.title})</option>
-                  ))}
-              </select>
-            </div>
-          ))}
+                <div className="flex items-start gap-3">
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs font-semibold text-[color:var(--ink)] truncate">{m.csvColumn}</p>
+                    {samples.length > 0 ? (
+                      <p className="mt-0.5 text-[10px] text-[color:var(--ink-soft)] truncate">
+                        {samples.join(" · ")}
+                      </p>
+                    ) : null}
+                    {/* Target chips */}
+                    {m.targets.length > 0 ? (
+                      <div className="mt-1.5 flex flex-wrap gap-1">
+                        {m.targets.map((t) => {
+                          const opt = options.find((o) => o.value === t);
+                          return (
+                            <span key={t} className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-medium text-emerald-800">
+                              {opt?.label ?? t}
+                              <button type="button" onClick={() => removeTarget(m.csvColumn, t)} className="hover:text-emerald-950">
+                                <X className="h-2.5 w-2.5" />
+                              </button>
+                            </span>
+                          );
+                        })}
+                      </div>
+                    ) : null}
+                  </div>
+                  <select
+                    value=""
+                    onChange={(e) => {
+                      if (!e.target.value) return;
+                      // If it's a meta field, replace all targets (only one meta per column makes sense)
+                      const metaFields = ["badge_number", "student_name", "name_abbreviated", "team_name", "team_number"];
+                      if (metaFields.includes(e.target.value)) {
+                        setTargets(m.csvColumn, [e.target.value]);
+                      } else {
+                        addTarget(m.csvColumn, e.target.value);
+                      }
+                    }}
+                    className="shrink-0 rounded-lg border border-[color:var(--line)] bg-white px-2 py-1.5 text-xs text-[color:var(--ink)] max-w-[14rem]"
+                  >
+                    <option value="">{m.targets.length === 0 ? "Select mapping..." : "+ Add mapping"}</option>
+                    {Array.from(groupedOptions.entries()).map(([group, opts]) => (
+                      <optgroup key={group} label={group}>
+                        {opts.filter((opt) => !m.targets.includes(opt.value)).map((opt) => (
+                          <option key={opt.value} value={opt.value}>{opt.label}</option>
+                        ))}
+                      </optgroup>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            );
+          })}
         </div>
-
-        {/* Unmapped columns that might be rooms */}
-        {mappings.filter((m) => !m.isMeta && !m.isTests && m.confidence === "none" && !headers.some((h) => h === m.csvColumn && mappings.find((mm) => mm.csvColumn === h)?.mappedSlugs.length)).length > 0 ? (
-          <details className="text-xs text-[color:var(--ink-soft)]">
-            <summary className="cursor-pointer font-medium">Skipped columns ({skippedCount})</summary>
-            <div className="mt-1 space-y-0.5 pl-4">
-              {mappings.filter((m) => m.confidence === "none" && !m.isMeta && !m.isTests).map((m) => (
-                <p key={m.csvColumn}>{m.csvColumn}</p>
-              ))}
-            </div>
-          </details>
-        ) : null}
       </div>
     );
   }
@@ -260,17 +332,14 @@ function UploadTab() {
   // Phase: select
   return (
     <div className="space-y-4">
-      <div className="rounded-[1.2rem] border border-[color:var(--line)] bg-white/60 px-4 py-3 text-xs text-[color:var(--ink-soft)] space-y-2">
-        <p className="font-semibold text-[color:var(--ink)]">Upload a CSV with student room assignments</p>
-        <p>Must include a <code className="rounded bg-[color:var(--canvas-deep)] px-1 py-0.5">number</code> column for badge numbers. Room columns will be auto-matched to schedule slots.</p>
-      </div>
-
-      <label className="flex cursor-pointer items-center justify-center gap-2 rounded-[1.4rem] border border-dashed border-[rgba(220,114,145,0.28)] bg-[rgba(255,245,248,0.75)] px-4 py-6 text-sm font-medium text-[color:var(--rose)]">
-        <FileUp className="h-4 w-4" />
+      <label className="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-[1.4rem] border border-dashed border-[rgba(220,114,145,0.28)] bg-[rgba(255,245,248,0.75)] px-4 py-8 text-center text-sm font-medium text-[color:var(--rose)]">
+        <FileUp className="h-5 w-5" />
         Select CSV File
+        <span className="text-xs font-normal text-[color:var(--ink-soft)]">
+          Columns will be auto-matched to schedule slots. You can adjust before importing.
+        </span>
         <input type="file" accept=".csv,text/csv" className="hidden" onChange={handleFileSelect} />
       </label>
-
       {error ? <p className="text-xs text-[color:var(--crimson)]">{error}</p> : null}
     </div>
   );
@@ -284,31 +353,51 @@ interface StudentRow {
   team_name: string;
   team_number: string;
   tests: string;
+  last_looked_up: string | null;
 }
 
-function BrowseTab() {
-  const { generalSchedule } = useAppState();
+interface StudentDetail {
+  studentName: string;
+  nameAbbreviated: string;
+  teamName: string;
+  teamNumber: string;
+  tests: string;
+  overrides: Record<string, { title?: string; location?: string }>;
+}
+
+function BrowseTab({ scheduleSlots }: { scheduleSlots: ScheduleSlot[] }) {
   const [students, setStudents] = useState<StudentRow[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(0);
   const [expandedBadge, setExpandedBadge] = useState<string | null>(null);
-  const [expandedOverrides, setExpandedOverrides] = useState<Record<string, { title?: string; location?: string }>>({});
-  const [expandedMeta, setExpandedMeta] = useState<StudentRow | null>(null);
-  const [editing, setEditing] = useState<string | null>(null);
+  const [detailsByBadge, setDetailsByBadge] = useState<Record<string, StudentDetail | null>>({});
+  const [loadingBadges, setLoadingBadges] = useState<Record<string, boolean>>({});
+  const [editingKey, setEditingKey] = useState<string | null>(null);
   const [editValue, setEditValue] = useState("");
+  const [actionError, setActionError] = useState("");
+  const [savingKey, setSavingKey] = useState<string | null>(null);
+  const [teamCount, setTeamCount] = useState(0);
+  const [setupCount, setSetupCount] = useState(0);
 
   const PAGE_SIZE = 25;
 
   const load = useCallback(async () => {
     setLoading(true);
+    setActionError("");
     try {
       const res = await fetch(`/api/admin/room-assignments/students?search=${encodeURIComponent(search)}&page=${page}&pageSize=${PAGE_SIZE}`);
-      if (!res.ok) return;
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setActionError(data.error || "Could not load students.");
+        return;
+      }
       const data = await res.json();
       setStudents(data.students);
       setTotal(data.total);
+      if (data.teamCount !== undefined) setTeamCount(data.teamCount);
+      if (data.setupCount !== undefined) setSetupCount(data.setupCount);
     } finally {
       setLoading(false);
     }
@@ -316,50 +405,103 @@ function BrowseTab() {
 
   useEffect(() => { load(); }, [load]);
 
-  async function expand(badge: string) {
+  useEffect(() => {
+    setExpandedBadge(null);
+    setEditingKey(null);
+  }, [search, page]);
+
+  const fetchStudentDetail = useCallback(async (badge: string) => {
+    setLoadingBadges((current) => ({ ...current, [badge]: true }));
+    setActionError("");
+
+    try {
+      const res = await fetch(`/api/student/${encodeURIComponent(badge)}`);
+      if (!res.ok) {
+        setDetailsByBadge((current) => ({ ...current, [badge]: null }));
+        setActionError("Could not load that student schedule.");
+        return null;
+      }
+
+      const data = await res.json();
+      const detail = (data ?? null) as StudentDetail | null;
+
+      setDetailsByBadge((current) => ({ ...current, [badge]: detail }));
+
+      if (!detail) {
+        setActionError("Could not load that student schedule.");
+      }
+
+      return detail;
+    } catch {
+      setDetailsByBadge((current) => ({ ...current, [badge]: null }));
+      setActionError("Could not load that student schedule.");
+      return null;
+    } finally {
+      setLoadingBadges((current) => {
+        const next = { ...current };
+        delete next[badge];
+        return next;
+      });
+    }
+  }, []);
+
+  async function toggleExpanded(badge: string) {
     if (expandedBadge === badge) {
       setExpandedBadge(null);
+      setEditingKey(null);
       return;
     }
+
     setExpandedBadge(badge);
-    const res = await fetch(`/api/student/${encodeURIComponent(badge)}`);
-    if (!res.ok) return;
-    const data = await res.json();
-    if (data) {
-      setExpandedOverrides(data.overrides ?? {});
-      setExpandedMeta(data);
+    setEditingKey(null);
+
+    if (!(badge in detailsByBadge) || detailsByBadge[badge] === null) {
+      await fetchStudentDetail(badge);
     }
   }
 
+  function getEditKey(badge: string, slotSlug: string) {
+    return `${badge}:${slotSlug}`;
+  }
+
   async function saveEdit(badge: string, slotSlug: string) {
-    const slot = generalSchedule.find((s) => s.slug === slotSlug);
+    const slot = scheduleSlots.find((s) => s.slug === slotSlug);
     if (!slot) return;
-    await fetch("/api/admin/room-assignments/students", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ badge, scheduleSlotId: slot.id, location: editValue })
-    });
-    setEditing(null);
-    // Refresh expanded view
-    expand(badge);
-    // Force re-expand
-    setExpandedBadge(null);
-    setTimeout(() => expand(badge), 100);
+    const key = getEditKey(badge, slotSlug);
+
+    setSavingKey(key);
+    setActionError("");
+
+    try {
+      const res = await fetch("/api/admin/room-assignments/students", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ badge, scheduleSlotId: slot.id, location: editValue })
+      });
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setActionError(data.error || "Could not save room assignment.");
+        return;
+      }
+
+      await fetchStudentDetail(badge);
+      setEditingKey(null);
+    } finally {
+      setSavingKey(null);
+    }
   }
 
   const totalPages = Math.ceil(total / PAGE_SIZE);
 
   // Stats
-  const roomSet = new Set<string>();
-  const teamSet = new Set<string>();
-  students.forEach((s) => { if (s.team_number) teamSet.add(s.team_number); });
-
   return (
     <div className="space-y-4">
       {/* Stats */}
       <div className="flex gap-3">
         <StatBox value={total} label="Students" />
-        <StatBox value={teamSet.size} label="Teams" />
+        <StatBox value={teamCount} label="Teams" />
+        <StatBox value={setupCount} label="Setup App" />
       </div>
 
       {/* Search */}
@@ -373,6 +515,12 @@ function BrowseTab() {
         />
       </div>
 
+      {actionError ? (
+        <div className="rounded-xl border border-[rgba(152,28,29,0.15)] bg-[rgba(152,28,29,0.04)] px-3 py-2 text-xs text-[color:var(--crimson)]">
+          {actionError}
+        </div>
+      ) : null}
+
       {loading ? (
         <div className="flex items-center justify-center py-8">
           <Loader2 className="h-5 w-5 animate-spin text-[color:var(--ink-soft)]" />
@@ -385,70 +533,106 @@ function BrowseTab() {
         <div className="space-y-1">
           {students.map((student) => {
             const isExpanded = expandedBadge === student.badge_number;
+            const detail = detailsByBadge[student.badge_number];
+            const detailLoading = Boolean(loadingBadges[student.badge_number]);
 
             return (
               <div key={student.badge_number} className="rounded-[1.2rem] border border-[color:var(--line)] bg-white/60 overflow-hidden">
                 <button
                   type="button"
-                  onClick={() => expand(student.badge_number)}
+                  onClick={() => toggleExpanded(student.badge_number)}
                   className="flex w-full items-center gap-3 px-4 py-3 text-left transition hover:bg-white/80"
                 >
                   {isExpanded ? <ChevronDown className="h-4 w-4 shrink-0 text-[color:var(--ink-soft)]" /> : <ChevronRight className="h-4 w-4 shrink-0 text-[color:var(--ink-soft)]" />}
                   <span className="w-12 shrink-0 text-xs font-bold text-[color:var(--crimson)]">{student.badge_number}</span>
                   <span className="flex-1 truncate text-sm font-medium text-[color:var(--ink)]">{student.student_name}</span>
+                  {student.last_looked_up ? (
+                    <span className="shrink-0 rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">Setup</span>
+                  ) : null}
                   <span className="hidden text-xs text-[color:var(--ink-soft)] sm:inline">{student.team_name}</span>
                 </button>
 
-                {isExpanded && expandedMeta ? (
+                {isExpanded ? (
                   <div className="border-t border-[color:var(--line)] bg-white/40 px-4 py-3">
-                    <div className="mb-2 flex items-center gap-2 text-xs text-[color:var(--ink-soft)]">
-                      <Users className="h-3 w-3" />
-                      Team {expandedMeta.team_number} &middot; {expandedMeta.team_name}
-                      {expandedMeta.tests ? ` · ${expandedMeta.tests}` : ""}
-                    </div>
-                    <div className="space-y-1.5">
-                      {generalSchedule.map((slot) => {
-                        const override = expandedOverrides[slot.slug];
-                        const isEditing = editing === slot.slug;
-                        return (
-                          <div key={slot.id} className="flex items-center gap-2 text-xs">
-                            <span className="w-16 shrink-0 font-semibold text-[color:var(--ink-soft)]">{slot.time}</span>
-                            <span className="font-medium text-[color:var(--ink)]">{override?.title || slot.title}</span>
-                            <span className="text-[color:var(--ink-soft)]">&middot;</span>
-                            {isEditing ? (
-                              <div className="flex gap-1 flex-1">
-                                <input
-                                  value={editValue}
-                                  onChange={(e) => setEditValue(e.target.value)}
-                                  className="flex-1 rounded border border-[color:var(--line)] bg-white px-2 py-0.5 text-xs outline-none"
-                                  autoFocus
-                                  onKeyDown={(e) => e.key === "Enter" && saveEdit(student.badge_number, slot.slug)}
-                                />
-                                <button type="button" onClick={() => saveEdit(student.badge_number, slot.slug)} className="rounded bg-[color:var(--ink)] px-2 py-0.5 text-white">Save</button>
-                                <button type="button" onClick={() => setEditing(null)} className="rounded border border-[color:var(--line)] px-2 py-0.5">Cancel</button>
+                    {detailLoading && detail === undefined ? (
+                      <div className="flex items-center gap-2 py-2 text-xs text-[color:var(--ink-soft)]">
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        Loading student schedule...
+                      </div>
+                    ) : detail ? (
+                      <>
+                        <div className="mb-2 flex items-center gap-2 text-xs text-[color:var(--ink-soft)]">
+                          <Users className="h-3 w-3" />
+                          Team {detail.teamNumber} &middot; {detail.teamName}
+                          {detail.tests ? ` · ${detail.tests}` : ""}
+                        </div>
+                        <div className="space-y-1.5">
+                          {scheduleSlots.map((slot) => {
+                            const override = detail.overrides[slot.slug];
+                            const editKey = getEditKey(student.badge_number, slot.slug);
+                            const isEditing = editingKey === editKey;
+                            const isSaving = savingKey === editKey;
+
+                            return (
+                              <div key={slot.id} className="flex items-center gap-2 text-xs">
+                                <span className="w-16 shrink-0 font-semibold text-[color:var(--ink-soft)]">{slot.time}</span>
+                                <span className="font-medium text-[color:var(--ink)]">{override?.title || slot.title}</span>
+                                <span className="text-[color:var(--ink-soft)]">&middot;</span>
+                                {isEditing ? (
+                                  <div className="flex flex-1 gap-1">
+                                    <input
+                                      value={editValue}
+                                      onChange={(e) => setEditValue(e.target.value)}
+                                      className="flex-1 rounded border border-[color:var(--line)] bg-white px-2 py-0.5 text-xs outline-none"
+                                      autoFocus
+                                      onKeyDown={(e) => e.key === "Enter" && void saveEdit(student.badge_number, slot.slug)}
+                                    />
+                                    <button
+                                      type="button"
+                                      onClick={() => void saveEdit(student.badge_number, slot.slug)}
+                                      disabled={isSaving}
+                                      className="rounded bg-[color:var(--ink)] px-2 py-0.5 text-white disabled:opacity-60"
+                                    >
+                                      {isSaving ? "Saving..." : "Save"}
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => setEditingKey(null)}
+                                      disabled={isSaving}
+                                      className="rounded border border-[color:var(--line)] px-2 py-0.5 disabled:opacity-60"
+                                    >
+                                      Cancel
+                                    </button>
+                                  </div>
+                                ) : (
+                                  <>
+                                    <span className="inline-flex items-center gap-1 text-[color:var(--ink-soft)]">
+                                      <MapPin className="h-2.5 w-2.5" />
+                                      {override?.location || slot.location}
+                                    </span>
+                                    {override?.location ? (
+                                      <span className="rounded-full bg-[rgba(152,28,29,0.08)] px-2 py-0.5 text-[10px] font-semibold text-[color:var(--crimson)]">Assigned</span>
+                                    ) : null}
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setEditingKey(editKey);
+                                        setEditValue(override?.location || slot.location);
+                                      }}
+                                      className="ml-auto shrink-0 rounded border border-[color:var(--line)] p-1 text-[color:var(--ink-soft)] hover:bg-white"
+                                    >
+                                      <Pencil className="h-2.5 w-2.5" />
+                                    </button>
+                                  </>
+                                )}
                               </div>
-                            ) : (
-                              <>
-                                <span className="inline-flex items-center gap-1 text-[color:var(--ink-soft)]">
-                                  <MapPin className="h-2.5 w-2.5" />
-                                  {override?.location || slot.location}
-                                </span>
-                                {override?.location ? (
-                                  <span className="rounded-full bg-[rgba(152,28,29,0.08)] px-2 py-0.5 text-[10px] font-semibold text-[color:var(--crimson)]">Assigned</span>
-                                ) : null}
-                                <button
-                                  type="button"
-                                  onClick={() => { setEditing(slot.slug); setEditValue(override?.location || slot.location); }}
-                                  className="ml-auto shrink-0 rounded border border-[color:var(--line)] p-1 text-[color:var(--ink-soft)] hover:bg-white"
-                                >
-                                  <Pencil className="h-2.5 w-2.5" />
-                                </button>
-                              </>
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
+                            );
+                          })}
+                        </div>
+                      </>
+                    ) : (
+                      <p className="text-xs text-[color:var(--ink-soft)]">Could not load this student&apos;s schedule.</p>
+                    )}
                   </div>
                 ) : null}
               </div>

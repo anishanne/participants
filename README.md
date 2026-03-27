@@ -6,8 +6,8 @@ Mobile-first participant web app with a bottom navbar, personalized schedules, a
 
 - Next.js App Router
 - Tailwind CSS
-- Supabase-ready schema and client helper
-- Local demo persistence for greenfield prototyping
+- Supabase-backed API routes
+- Stanford SAML admin auth
 
 ## Local Development
 
@@ -27,11 +27,12 @@ npm run dev
 
 ## Environment
 
-Create `.env.local` when you are ready to hook up Supabase:
+Create `.env.local` when you are ready to hook up Supabase and admin auth:
 
 ```bash
 NEXT_PUBLIC_SUPABASE_URL=your-project-url
-NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
+SUPABASE_SERVICE_KEY=your-service-role-key
+SESSION_SECRET=your-long-random-session-secret
 ```
 
 ## Included Flows
@@ -47,8 +48,8 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
 ## Supabase Handoff
 
 - SQL schema lives in [`supabase/schema.sql`](./supabase/schema.sql)
-- Browser client helper lives in [`lib/supabase.ts`](./lib/supabase.ts)
-- Current persistence is local-first so the prototype runs before backend wiring
+- Server helper lives in [`lib/supabase-server.ts`](./lib/supabase-server.ts)
+- The app reads and writes through API routes using the service key
 
 ## Notes
 

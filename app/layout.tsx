@@ -1,6 +1,5 @@
 import type { Metadata, Viewport } from "next";
 import { Roboto } from "next/font/google";
-import { AppStateProvider } from "@/components/app-state-provider";
 import { OfflineBanner } from "@/components/offline-banner";
 import { PwaRegister } from "@/components/pwa-register";
 import { UpdateBanner } from "@/components/update-banner";
@@ -64,12 +63,10 @@ export default function RootLayout({
   return (
     <html lang="en" className={roboto.variable}>
       <body>
-        <AppStateProvider>
-          <PwaRegister />
-          <OfflineBanner />
-          <UpdateBanner />
-          {children}
-        </AppStateProvider>
+        <PwaRegister />
+        <OfflineBanner />
+        <UpdateBanner />
+        {children}
       </body>
     </html>
   );
