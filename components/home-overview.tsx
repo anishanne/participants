@@ -134,6 +134,7 @@ export function HomeOverview() {
   );
 
   useEffect(() => {
+    setEventStatus(getEventStatus(generalSchedule, tournamentDate));
     const interval = setInterval(() => {
       setEventStatus(getEventStatus(generalSchedule, tournamentDate));
     }, 30_000);
