@@ -7,7 +7,8 @@ import {
   useParticipantPreferences
 } from "@/components/app-state-provider";
 import { SkeletonTimelineRow } from "@/components/skeleton";
-import { isTodayPST, parsePST } from "@/lib/config";
+import Link from "next/link";
+import { getBuildingIdFromLocation, isTodayPST, parsePST } from "@/lib/config";
 import { formatScheduleTimeCompact } from "@/lib/schedule";
 import type { ResolvedScheduleSlot } from "@/lib/types";
 
@@ -279,10 +280,7 @@ export function ScheduleView() {
                           </span>
                         ) : null}
                       </div>
-                      <div className="mt-0.5 flex items-center gap-1 text-xs text-[color:var(--ink-soft)]">
-                        <MapPin className="h-3 w-3 shrink-0" />
-                        <span className="truncate">{displayLocation}</span>
-                      </div>
+                      <LocationLink location={displayLocation} />
                     </div>
                     <ChevronDown className={`mt-1 h-3.5 w-3.5 shrink-0 text-[color:var(--ink-soft)] transition ${isExpanded ? "rotate-180" : ""
                       }`} />
@@ -305,6 +303,30 @@ export function ScheduleView() {
           })}
         </div>
       </section>
+    </div>
+  );
+}
+
+function LocationLink({ location }: { location: string }) {
+  const buildingId = getBuildingIdFromLocation(location);
+
+  if (buildingId) {
+    return (
+      <Link
+        href={`/map?building=${buildingId}`}
+        className="mt-0.5 flex items-center gap-1 text-xs text-[color:var(--crimson)] hover:underline"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <MapPin className="h-3 w-3 shrink-0" />
+        <span className="truncate">{location}</span>
+      </Link>
+    );
+  }
+
+  return (
+    <div className="mt-0.5 flex items-center gap-1 text-xs text-[color:var(--ink-soft)]">
+      <MapPin className="h-3 w-3 shrink-0" />
+      <span className="truncate">{location}</span>
     </div>
   );
 }

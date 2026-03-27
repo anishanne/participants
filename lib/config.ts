@@ -22,3 +22,17 @@ export function isTodayPST(dateStr: string): boolean {
   const dStr = d.toLocaleDateString("en-CA", { timeZone: "America/Los_Angeles" });
   return dStr === todayPST();
 }
+
+const BUILDING_IDS: Record<string, string> = {
+  hewlett: "hewlett",
+  stlc: "stlc",
+  coda: "coda",
+  lathrop: "lathrop",
+};
+
+/** Extract building ID from a location string like "Hewlett 200" → "hewlett" */
+export function getBuildingIdFromLocation(location: string): string | null {
+  if (!location) return null;
+  const firstWord = location.split(/[\s,]/)[0].toLowerCase();
+  return BUILDING_IDS[firstWord] ?? null;
+}

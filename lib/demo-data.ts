@@ -4,46 +4,37 @@ export const MAP_LOCATIONS: MapLocation[] = [
   {
     id: "hewlett",
     name: "Hewlett Teaching Center",
-    shortLabel: "HW",
-    description: "Opening ceremony, Guts Round, and Awards Ceremony in Hewlett 200.",
-    area: "Main Quad",
+    shortLabel: "Hewlett",
+    description: "Rooms 102, 103, 200, 201",
+    area: "Science & Engineering",
     x: 18,
-    y: 26
+    y: 65
   },
   {
-    id: "gates",
-    name: "Gates Computer Science",
-    shortLabel: "GA",
-    description: "Subject test rooms on the basement level.",
-    area: "Engineering Quad",
-    x: 78,
-    y: 28
+    id: "stlc",
+    name: "STLC (Sapp Center)",
+    shortLabel: "STLC",
+    description: "Rooms 104, 105, 114, 115, 118, 119",
+    area: "Science & Engineering",
+    x: 40,
+    y: 22
   },
   {
-    id: "tresidder",
-    name: "Tresidder Union",
-    shortLabel: "TR",
-    description: "Lunch break and team meetup area in the courtyard.",
-    area: "Central Campus",
-    x: 58,
-    y: 58
-  },
-  {
-    id: "building380",
-    name: "Building 380 (Math)",
-    shortLabel: "380",
-    description: "Power and Team round rooms for assigned groups.",
-    area: "Science Quad",
+    id: "coda",
+    name: "Coda",
+    shortLabel: "Coda",
+    description: "Rooms B60, B80, B90",
+    area: "Science & Engineering",
     x: 30,
-    y: 72
+    y: 42
   },
   {
-    id: "huang",
-    name: "Huang Engineering Center",
-    shortLabel: "HU",
-    description: "Additional Power and Team round rooms. Help desk on ground floor.",
-    area: "Engineering Quad",
-    x: 10,
-    y: 56
-  }
+    id: "lathrop",
+    name: "Lathrop Library",
+    shortLabel: "Bishop",
+    description: "Bishop Auditorium",
+    area: "East Campus",
+    x: 80,
+    y: 55
+  },
 ];

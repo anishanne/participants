@@ -21,7 +21,7 @@ import {
   useParticipantPreferences
 } from "@/components/app-state-provider";
 import { SkeletonAnnouncementCard, SkeletonEventCard } from "@/components/skeleton";
-import { isTodayPST, parsePST } from "@/lib/config";
+import { getBuildingIdFromLocation, isTodayPST, parsePST } from "@/lib/config";
 import type { ScheduleSlot } from "@/lib/types";
 import { formatDisplayPhone, formatPhone } from "@/lib/utils";
 
@@ -318,7 +318,7 @@ function EventStatusCard({ status, tournamentDate }: { status: EventStatus; tour
             {status.firstSlot.title}
           </h2>
           <p className="text-sm text-[color:var(--ink-soft)]">
-            {status.firstSlot.time} &middot; {status.firstSlot.location}
+            {status.firstSlot.time} &middot; <LocationText location={status.firstSlot.location} />
           </p>
           <Link
             href="/schedule"
@@ -348,7 +348,7 @@ function EventStatusCard({ status, tournamentDate }: { status: EventStatus; tour
               {status.currentSlot.title}
             </h2>
             <p className="text-sm text-[color:var(--ink-soft)]">
-              {status.currentSlot.time} &middot; {status.currentSlot.location}
+              {status.currentSlot.time} &middot; <LocationText location={status.currentSlot.location} />
             </p>
           </div>
           <div className="mt-3 flex gap-2">
@@ -375,7 +375,7 @@ function EventStatusCard({ status, tournamentDate }: { status: EventStatus; tour
                 <p className="text-[10px] font-semibold uppercase tracking-[0.3em] text-[color:var(--ink-soft)]">Up Next</p>
                 <p className="mt-1 text-sm font-semibold text-[color:var(--ink)]">{status.nextSlot.title}</p>
                 <p className="text-xs text-[color:var(--ink-soft)]">
-                  {status.nextSlot.time} &middot; {status.nextSlot.location}
+                  {status.nextSlot.time} &middot; <LocationText location={status.nextSlot.location} />
                 </p>
               </div>
               <span className="pill">{status.nextSlot.track}</span>
@@ -395,7 +395,7 @@ function EventStatusCard({ status, tournamentDate }: { status: EventStatus; tour
           {status.nextSlot.title}
         </h2>
         <p className="text-sm text-[color:var(--ink-soft)]">
-          {status.nextSlot.time} &middot; {status.nextSlot.location}
+          {status.nextSlot.time} &middot; <LocationText location={status.nextSlot.location} />
         </p>
         {status.nextSlot.track ? <span className="pill">{status.nextSlot.track}</span> : null}
         <div className="flex gap-2 pt-1">
@@ -834,6 +834,18 @@ function SetupStepRow({
 }
 
 /* ---------- Push pill with secret test ---------- */
+
+function LocationText({ location }: { location: string }) {
+  const buildingId = getBuildingIdFromLocation(location);
+  if (buildingId) {
+    return (
+      <Link href={`/map?building=${buildingId}`} className="text-[color:var(--crimson)] hover:underline">
+        {location}
+      </Link>
+    );
+  }
+  return <>{location}</>;
+}
 
 function PushPillWithTest() {
   const [sent, setSent] = useState(false);

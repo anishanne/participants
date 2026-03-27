@@ -1,16 +1,29 @@
 "use client";
 
 import { Compass, MapPin } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { useParticipantData } from "@/components/app-state-provider";
 
 export function CampusMap() {
   const { mapLocations } = useParticipantData();
-  const [selectedLocationId, setSelectedLocationId] = useState(mapLocations[0]?.id ?? "");
-  const selectedLocation = mapLocations.find((location) => location.id === selectedLocationId) ?? mapLocations[0];
+  const searchParams = useSearchParams();
+  const buildingParam = searchParams.get("building");
+
+  const [selectedId, setSelectedId] = useState(
+    buildingParam ?? mapLocations[0]?.id ?? ""
+  );
+
+  useEffect(() => {
+    if (buildingParam && mapLocations.some((l) => l.id === buildingParam)) {
+      setSelectedId(buildingParam);
+    }
+  }, [buildingParam, mapLocations]);
+
+  const selected = mapLocations.find((l) => l.id === selectedId) ?? mapLocations[0];
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-4">
       <section className="panel p-5">
         <div className="flex items-start gap-3">
           <div className="rounded-2xl bg-[rgba(152,28,29,0.1)] p-3 text-[color:var(--crimson)]">
@@ -18,63 +31,77 @@ export function CampusMap() {
           </div>
           <div>
             <p className="eyebrow">Map</p>
-            <h1 className="section-title mt-1">Stanford Campus</h1>
+            <h1 className="section-title mt-1">Campus Buildings</h1>
           </div>
         </div>
       </section>
 
       <section className="panel overflow-hidden p-4">
-        <div className="relative h-[22rem] rounded-[1.5rem] border border-[color:var(--line)] bg-[linear-gradient(180deg,rgba(255,255,255,0.88),rgba(255,251,240,0.8))]">
-          <div className="absolute inset-4 rounded-[1.3rem] border-2 border-dashed border-[rgba(59,28,28,0.1)]" />
-          <div className="absolute left-[6%] top-[10%] h-[32%] w-[28%] rounded-[1.2rem] bg-[rgba(220,114,145,0.09)]" />
-          <div className="absolute left-[40%] top-[12%] h-[28%] w-[46%] rounded-[1.2rem] bg-[rgba(152,28,29,0.07)]" />
-          <div className="absolute left-[18%] top-[52%] h-[30%] w-[56%] rounded-[1.2rem] bg-[rgba(244,185,66,0.11)]" />
-          {mapLocations.map((location) => (
-            <button
-              key={location.id}
-              type="button"
-              onClick={() => setSelectedLocationId(location.id)}
-              className={`absolute -translate-x-1/2 -translate-y-1/2 rounded-full border-4 border-white bg-[color:var(--ink)] p-2 text-white shadow-lg transition hover:scale-105 ${location.id === selectedLocationId ? "scale-110 bg-[color:var(--crimson)]" : ""
+        <div className="relative h-[20rem] rounded-[1.5rem] border border-[color:var(--line)] overflow-hidden">
+          {/* OpenStreetMap tiles stitched at z17, centered on Stanford Science & Engineering area */}
+          <img
+            src="/campus-map.png"
+            alt="Stanford campus"
+            className="absolute inset-0 h-full w-full object-cover opacity-30"
+          />
+
+          {mapLocations.map((location) => {
+            const isSelected = location.id === selectedId;
+            return (
+              <button
+                key={location.id}
+                type="button"
+                onClick={() => setSelectedId(location.id)}
+                className={`absolute -translate-x-1/2 -translate-y-1/2 transition ${
+                  isSelected ? "z-10 scale-110" : "hover:scale-105"
                 }`}
-              style={{ left: `${location.x}%`, top: `${location.y}%` }}
-              aria-label={location.name}
-            >
-              <MapPin className="h-4 w-4" />
-            </button>
-          ))}
+                style={{ left: `${location.x}%`, top: `${location.y}%` }}
+                aria-label={location.name}
+              >
+                <div className={`flex items-center gap-1.5 rounded-full border-2 px-2 py-1 text-[10px] font-bold shadow-md ${
+                  isSelected
+                    ? "border-white bg-[color:var(--crimson)] text-white"
+                    : "border-white bg-[color:var(--ink)] text-white"
+                }`}>
+                  <MapPin className="h-3 w-3" />
+                  {location.shortLabel}
+                </div>
+              </button>
+            );
+          })}
         </div>
       </section>
 
-      {selectedLocation ? (
-        <section className="panel p-5">
-          <div className="space-y-3">
-            <div className="flex items-center justify-between gap-3">
+      <section className="space-y-2">
+        {mapLocations.map((location) => {
+          const isSelected = location.id === selectedId;
+          return (
+            <button
+              key={location.id}
+              type="button"
+              onClick={() => setSelectedId(location.id)}
+              className={`flex w-full items-center justify-between gap-4 rounded-panel border p-4 text-left transition hover:-translate-y-0.5 ${
+                isSelected
+                  ? "border-[color:var(--crimson)] bg-[rgba(152,28,29,0.06)] shadow-lift"
+                  : "border-white/70 bg-white/80 shadow-lift backdrop-blur"
+              }`}
+            >
               <div>
-                <p className="eyebrow">{selectedLocation.area}</p>
-                <h2 className="text-xl font-semibold tracking-tight">{selectedLocation.name}</h2>
+                <p className={`text-sm font-semibold ${isSelected ? "text-[color:var(--crimson)]" : "text-[color:var(--ink)]"}`}>
+                  {location.name}
+                </p>
+                <p className="text-xs text-[color:var(--ink-soft)]">{location.description}</p>
               </div>
-              <span className="pill">{selectedLocation.shortLabel}</span>
-            </div>
-            <p className="body-copy">{selectedLocation.description}</p>
-          </div>
-        </section>
-      ) : null}
-
-      <section className="space-y-3">
-        {mapLocations.map((location) => (
-          <button
-            key={location.id}
-            type="button"
-            onClick={() => setSelectedLocationId(location.id)}
-            className="panel flex w-full items-center justify-between gap-4 p-4 text-left transition hover:-translate-y-0.5"
-          >
-            <div>
-              <p className="text-sm font-semibold text-[color:var(--ink)]">{location.name}</p>
-              <p className="text-sm text-[color:var(--ink-soft)]">{location.area}</p>
-            </div>
-            <span className="pill">{location.shortLabel}</span>
-          </button>
-        ))}
+              <span className={`inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-medium ${
+                isSelected
+                  ? "border-[color:var(--crimson)]/20 bg-[color:var(--crimson)] text-white"
+                  : "border-white/70 bg-white/85 text-[color:var(--ink)]"
+              }`}>
+                {location.shortLabel}
+              </span>
+            </button>
+          );
+        })}
       </section>
     </div>
   );
