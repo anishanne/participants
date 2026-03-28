@@ -2,7 +2,7 @@
 
 import ReactMarkdown from "react-markdown";
 import { AlertTriangle, Check, Loader2, Megaphone, Pencil, Plus, SendHorizonal, Trash2, WandSparkles, X } from "lucide-react";
-import { useCallback, useDeferredValue, useEffect, useState } from "react";
+import { useCallback, useDeferredValue, useEffect, useRef, useState } from "react";
 import { RoomAssignments } from "@/components/room-assignments";
 import { SkeletonScheduleSlot } from "@/components/skeleton";
 import { TOURNAMENT_DATE } from "@/lib/config";
@@ -25,6 +25,25 @@ const defaultAnnouncementBody = `## Tournament update
 function useAdminSchedule() {
   const [generalSchedule, setGeneralSchedule] = useState<ScheduleSlot[]>([]);
   const [loading, setLoading] = useState(true);
+  const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved">("idle");
+  const inflightRef = useRef(0);
+  const savedTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const debounceTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
+  const pendingPatchesRef = useRef<Map<string, ScheduleSlotPatch>>(new Map());
+
+  function trackSave(promise: Promise<unknown>) {
+    inflightRef.current += 1;
+    setSaveStatus("saving");
+    clearTimeout(savedTimerRef.current);
+
+    promise.finally(() => {
+      inflightRef.current -= 1;
+      if (inflightRef.current === 0) {
+        setSaveStatus("saved");
+        savedTimerRef.current = setTimeout(() => setSaveStatus("idle"), 2000);
+      }
+    });
+  }
 
   const refreshSchedule = useCallback(async () => {
     try {
@@ -40,6 +59,14 @@ function useAdminSchedule() {
   useEffect(() => {
     void refreshSchedule();
   }, [refreshSchedule]);
+
+  useEffect(() => {
+    const debounceTimers = debounceTimersRef.current;
+    return () => {
+      debounceTimers.forEach((timer) => clearTimeout(timer));
+      clearTimeout(savedTimerRef.current);
+    };
+  }, []);
 
   function addScheduleSlot() {
     const nextIndex = generalSchedule.length + 1;
@@ -58,7 +85,7 @@ function useAdminSchedule() {
 
     setGeneralSchedule((current) => [...current, newSlot]);
 
-    fetch("/api/admin/schedule", {
+    const fetchPromise = fetch("/api/admin/schedule", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -79,18 +106,29 @@ function useAdminSchedule() {
         setGeneralSchedule((current) => current.filter((slot) => slot.id !== tempId));
         void refreshSchedule();
       });
+
+    trackSave(fetchPromise);
   }
 
   function removeScheduleSlot(slotId: string) {
+    const timer = debounceTimersRef.current.get(slotId);
+    if (timer) {
+      clearTimeout(timer);
+      debounceTimersRef.current.delete(slotId);
+      pendingPatchesRef.current.delete(slotId);
+    }
+
     setGeneralSchedule((current) => current.filter((slot) => slot.id !== slotId));
 
-    fetch("/api/admin/schedule", {
+    const fetchPromise = fetch("/api/admin/schedule", {
       method: "DELETE",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ id: slotId })
     }).catch(() => {
       void refreshSchedule();
     });
+
+    trackSave(fetchPromise);
   }
 
   function updateScheduleSlot(slotId: string, patch: ScheduleSlotPatch) {
@@ -98,13 +136,31 @@ function useAdminSchedule() {
       current.map((slot) => (slot.id === slotId ? applySchedulePatch(slot, patch) : slot))
     );
 
-    fetch("/api/admin/schedule", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id: slotId, ...toScheduleApiPatch(patch) })
-    }).catch(() => {
-      void refreshSchedule();
-    });
+    const existing = pendingPatchesRef.current.get(slotId);
+    pendingPatchesRef.current.set(slotId, existing ? { ...existing, ...patch } : patch);
+
+    const existingTimer = debounceTimersRef.current.get(slotId);
+    if (existingTimer) clearTimeout(existingTimer);
+
+    debounceTimersRef.current.set(
+      slotId,
+      setTimeout(() => {
+        const pending = pendingPatchesRef.current.get(slotId);
+        if (!pending) return;
+        pendingPatchesRef.current.delete(slotId);
+        debounceTimersRef.current.delete(slotId);
+
+        const fetchPromise = fetch("/api/admin/schedule", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id: slotId, ...toScheduleApiPatch(pending) })
+        }).catch(() => {
+          void refreshSchedule();
+        });
+
+        trackSave(fetchPromise);
+      }, 500)
+    );
   }
 
   return {
@@ -112,6 +168,7 @@ function useAdminSchedule() {
     generalSchedule,
     loading,
     removeScheduleSlot,
+    saveStatus,
     updateScheduleSlot
   };
 }
@@ -122,6 +179,7 @@ export function AdminDashboard() {
     generalSchedule,
     loading: appLoading,
     removeScheduleSlot,
+    saveStatus,
     updateScheduleSlot
   } = useAdminSchedule();
   const [announcement, setAnnouncement] = useState({
@@ -313,6 +371,27 @@ export function AdminDashboard() {
       </section>
 
       <SentAnnouncements reloadKey={sentReloadKey} />
+
+      {/* Floating save status bar */}
+      <div
+        className={`fixed bottom-6 left-1/2 z-50 -translate-x-1/2 flex items-center gap-2 rounded-full border border-[color:var(--line)] bg-[color:var(--panel-strong)] px-4 py-2.5 shadow-lift backdrop-blur transition-all duration-300 ${
+          saveStatus === "idle"
+            ? "translate-y-4 opacity-0 pointer-events-none"
+            : "translate-y-0 opacity-100"
+        }`}
+      >
+        {saveStatus === "saving" ? (
+          <>
+            <Loader2 className="h-4 w-4 animate-spin text-[color:var(--crimson)]" />
+            <span className="text-sm font-medium text-[color:var(--ink)]">Saving...</span>
+          </>
+        ) : (
+          <>
+            <Check className="h-4 w-4 text-emerald-600" />
+            <span className="text-sm font-medium text-[color:var(--ink)]">Saved!</span>
+          </>
+        )}
+      </div>
     </div>
   );
 }
