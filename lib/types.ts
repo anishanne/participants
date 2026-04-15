@@ -8,6 +8,7 @@ export interface ParticipantPreferences {
 
 export interface ScheduleSlot {
   id: string;
+  sortOrder: number;
   slug: string;
   startsAt: string;
   time: string;
@@ -18,7 +19,7 @@ export interface ScheduleSlot {
 }
 
 export type ScheduleSlotPatch = Partial<
-  Pick<ScheduleSlot, "slug" | "startsAt" | "title" | "location" | "description" | "track">
+  Pick<ScheduleSlot, "sortOrder" | "slug" | "startsAt" | "title" | "location" | "description" | "track">
 >;
 
 export interface ResolvedScheduleSlot extends ScheduleSlot {

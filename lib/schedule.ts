@@ -39,9 +39,11 @@ export function createScheduleStartsAt(tournamentDate: string, timeValue: string
 
 export function mapScheduleRow(row: Record<string, unknown>): ScheduleSlot {
   const startsAt = row.starts_at as string;
+  const sortOrder = typeof row.sort_order === "number" ? row.sort_order : 0;
 
   return {
     id: row.id as string,
+    sortOrder,
     slug: row.slug as string,
     startsAt,
     time: formatScheduleTime(startsAt),
@@ -64,6 +66,7 @@ export function applySchedulePatch(slot: ScheduleSlot, patch: ScheduleSlotPatch)
 export function toScheduleApiPatch(patch: ScheduleSlotPatch): Record<string, unknown> {
   const payload: Record<string, unknown> = {};
 
+  if (patch.sortOrder !== undefined) payload.sort_order = patch.sortOrder;
   if (patch.slug !== undefined) payload.slug = patch.slug;
   if (patch.startsAt !== undefined) payload.starts_at = patch.startsAt;
   if (patch.title !== undefined) payload.title = patch.title;

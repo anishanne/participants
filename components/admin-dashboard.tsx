@@ -1,7 +1,20 @@
 "use client";
 
 import ReactMarkdown from "react-markdown";
-import { AlertTriangle, Check, Loader2, Megaphone, Pencil, Plus, SendHorizonal, Trash2, WandSparkles, X } from "lucide-react";
+import {
+  AlertTriangle,
+  ArrowDown,
+  ArrowUp,
+  Check,
+  Loader2,
+  Megaphone,
+  Pencil,
+  Plus,
+  SendHorizonal,
+  Trash2,
+  WandSparkles,
+  X
+} from "lucide-react";
 import { useCallback, useDeferredValue, useEffect, useRef, useState } from "react";
 import { RoomAssignments } from "@/components/room-assignments";
 import { SkeletonScheduleSlot } from "@/components/skeleton";
@@ -21,6 +34,17 @@ const defaultAnnouncementBody = `## Tournament update
 - Rooms open 15 minutes before each session
 - Use targeted blasts for student-specific reroutes
 - Toggle SMS when the update matters away from the app`;
+
+function moveArrayItem<T>(items: T[], fromIndex: number, toIndex: number): T[] {
+  const nextItems = [...items];
+  const [movedItem] = nextItems.splice(fromIndex, 1);
+  nextItems.splice(toIndex, 0, movedItem);
+  return nextItems;
+}
+
+function normalizeScheduleOrder(schedule: ScheduleSlot[]): ScheduleSlot[] {
+  return schedule.map((slot, index) => ({ ...slot, sortOrder: index + 1 }));
+}
 
 function useAdminSchedule() {
   const [generalSchedule, setGeneralSchedule] = useState<ScheduleSlot[]>([]);
@@ -70,10 +94,12 @@ function useAdminSchedule() {
 
   function addScheduleSlot() {
     const nextIndex = generalSchedule.length + 1;
+    const nextSortOrder = generalSchedule.reduce((max, slot) => Math.max(max, slot.sortOrder), 0) + 1;
     const startsAt = createScheduleStartsAt(TOURNAMENT_DATE, "18:00") ?? new Date().toISOString();
     const tempId = `slot_${crypto.randomUUID()}`;
     const newSlot: ScheduleSlot = {
       id: tempId,
+      sortOrder: nextSortOrder,
       slug: `CustomSlot${nextIndex}`,
       startsAt,
       time: formatScheduleTime(startsAt),
@@ -95,7 +121,7 @@ function useAdminSchedule() {
         location: newSlot.location,
         description: newSlot.description,
         track: newSlot.track,
-        sort_order: nextIndex
+        sort_order: nextSortOrder
       })
     })
       .then(async (res) => {
@@ -106,6 +132,30 @@ function useAdminSchedule() {
         setGeneralSchedule((current) => current.filter((slot) => slot.id !== tempId));
         void refreshSchedule();
       });
+
+    trackSave(fetchPromise);
+  }
+
+  function persistScheduleOrder(nextSchedule: ScheduleSlot[]) {
+    const normalizedSchedule = normalizeScheduleOrder(nextSchedule);
+    setGeneralSchedule(normalizedSchedule);
+
+    const persistedSlots = normalizedSchedule.filter((slot) => !slot.id.startsWith("slot_"));
+    if (persistedSlots.length === 0) return;
+
+    const fetchPromise = Promise.all(
+      persistedSlots.map((slot) =>
+        fetch("/api/admin/schedule", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id: slot.id, sort_order: slot.sortOrder })
+        }).then((res) => {
+          if (!res.ok) throw new Error("Failed to reorder schedule");
+        })
+      )
+    ).catch(() => {
+      void refreshSchedule();
+    });
 
     trackSave(fetchPromise);
   }
@@ -129,6 +179,18 @@ function useAdminSchedule() {
     });
 
     trackSave(fetchPromise);
+  }
+
+  function moveScheduleSlot(slotId: string, direction: "up" | "down") {
+    if (inflightRef.current > 0 || generalSchedule.some((slot) => slot.id.startsWith("slot_"))) return;
+
+    const currentIndex = generalSchedule.findIndex((slot) => slot.id === slotId);
+    if (currentIndex === -1) return;
+
+    const targetIndex = direction === "up" ? currentIndex - 1 : currentIndex + 1;
+    if (targetIndex < 0 || targetIndex >= generalSchedule.length) return;
+
+    persistScheduleOrder(moveArrayItem(generalSchedule, currentIndex, targetIndex));
   }
 
   function updateScheduleSlot(slotId: string, patch: ScheduleSlotPatch) {
@@ -167,6 +229,7 @@ function useAdminSchedule() {
     addScheduleSlot,
     generalSchedule,
     loading,
+    moveScheduleSlot,
     removeScheduleSlot,
     saveStatus,
     updateScheduleSlot
@@ -178,10 +241,13 @@ export function AdminDashboard() {
     addScheduleSlot,
     generalSchedule,
     loading: appLoading,
+    moveScheduleSlot,
     removeScheduleSlot,
     saveStatus,
     updateScheduleSlot
   } = useAdminSchedule();
+  const hasPendingNewSlot = generalSchedule.some((slot) => slot.id.startsWith("slot_"));
+  const reorderDisabled = hasPendingNewSlot || saveStatus === "saving";
   const [announcement, setAnnouncement] = useState({
     title: "New announcement",
     body: defaultAnnouncementBody,
@@ -241,6 +307,9 @@ export function AdminDashboard() {
           <div>
             <p className="eyebrow">Schedule</p>
             <h2 className="section-title mt-1">Tournament Day</h2>
+            <p className="mt-2 text-sm text-[color:var(--ink-soft)]">
+              Use the arrow buttons on each slot to change the order shown across the app.
+            </p>
           </div>
           <button
             type="button"
@@ -252,13 +321,48 @@ export function AdminDashboard() {
           </button>
         </div>
         <div className="mt-4 space-y-4">
+          {hasPendingNewSlot ? (
+            <p className="rounded-2xl border border-[rgba(152,28,29,0.14)] bg-[rgba(152,28,29,0.05)] px-4 py-3 text-sm text-[color:var(--ink-soft)]">
+              Finish saving newly added slots before reordering the schedule.
+            </p>
+          ) : null}
           {appLoading ? (
             Array.from({ length: 3 }).map((_, i) => (
               <SkeletonScheduleSlot key={i} />
             ))
           ) : null}
-          {generalSchedule.map((slot) => (
+          {generalSchedule.map((slot, index) => (
             <article key={slot.id} className="rounded-[1.5rem] border border-[color:var(--line)] bg-white/75 p-4">
+              <div className="mb-4 flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-[0.28em] text-[color:var(--ink-soft)]">
+                    Position {index + 1}
+                  </p>
+                  <p className="mt-1 text-sm text-[color:var(--ink-soft)]">
+                    Reorder this slot without changing its published start time.
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    disabled={reorderDisabled || index === 0}
+                    onClick={() => moveScheduleSlot(slot.id, "up")}
+                    className="inline-flex items-center gap-2 rounded-2xl border border-[color:var(--line)] px-3 py-2 text-sm font-medium text-[color:var(--ink)] transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-45"
+                  >
+                    <ArrowUp className="h-4 w-4" />
+                    Move Up
+                  </button>
+                  <button
+                    type="button"
+                    disabled={reorderDisabled || index === generalSchedule.length - 1}
+                    onClick={() => moveScheduleSlot(slot.id, "down")}
+                    className="inline-flex items-center gap-2 rounded-2xl border border-[color:var(--line)] px-3 py-2 text-sm font-medium text-[color:var(--ink)] transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-45"
+                  >
+                    <ArrowDown className="h-4 w-4" />
+                    Move Down
+                  </button>
+                </div>
+              </div>
               <div className="grid gap-3 grid-cols-2 lg:grid-cols-3">
                 <TimeField
                   label="Start (PT)"
