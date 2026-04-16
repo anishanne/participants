@@ -1,4 +1,4 @@
-export const TOURNAMENT_DATE = "2026-03-27";
+export const TOURNAMENT_DATE = "2026-04-18";
 
 /** Parse a date string as PST (America/Los_Angeles). */
 export function parsePST(dateStr: string): Date {
