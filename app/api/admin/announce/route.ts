@@ -50,6 +50,23 @@ export async function PATCH(request: Request) {
   return NextResponse.json({ success: true });
 }
 
+export async function DELETE(request: Request) {
+  if (!await isApprovedAdmin()) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
+  }
+
+  const { id } = await request.json();
+  if (!id) return NextResponse.json({ error: "ID is required" }, { status: 400 });
+
+  const supabase = getSupabase();
+  if (!supabase) return NextResponse.json({ error: "Database not configured" }, { status: 500 });
+
+  const { error } = await supabase.from("announcements").delete().eq("id", id);
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  return NextResponse.json({ success: true });
+}
+
 export async function POST(request: Request) {
   if (!await isApprovedAdmin()) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 403 });

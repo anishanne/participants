@@ -563,6 +563,7 @@ function SentAnnouncements({ reloadKey }: { reloadKey: number }) {
   const [editTitle, setEditTitle] = useState("");
   const [editBody, setEditBody] = useState("");
   const [saving, setSaving] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -583,6 +584,20 @@ function SentAnnouncements({ reloadKey }: { reloadKey: number }) {
     setEditingId(item.id);
     setEditTitle(item.title);
     setEditBody(item.body_markdown);
+  }
+
+  async function deleteAnnouncement(id: string) {
+    setDeletingId(id);
+    try {
+      await fetch("/api/admin/announce", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id })
+      });
+      await load();
+    } finally {
+      setDeletingId(null);
+    }
   }
 
   async function saveEdit() {
@@ -687,6 +702,14 @@ function SentAnnouncements({ reloadKey }: { reloadKey: number }) {
                         className="rounded-lg border border-[color:var(--line)] p-1.5 text-[color:var(--ink-soft)] transition hover:bg-white"
                       >
                         <Pencil className="h-3 w-3" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => deleteAnnouncement(item.id)}
+                        disabled={deletingId === item.id}
+                        className="rounded-lg border border-red-200 p-1.5 text-red-400 transition hover:bg-red-50 disabled:opacity-50"
+                      >
+                        <Trash2 className="h-3 w-3" />
                       </button>
                     </div>
                   </div>
