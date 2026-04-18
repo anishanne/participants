@@ -1,6 +1,7 @@
 "use client";
 
 import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import { BellRing } from "lucide-react";
 import { useParticipantData } from "@/components/app-state-provider";
 import { SkeletonAnnouncementCard } from "@/components/skeleton";
@@ -43,7 +44,16 @@ export function AnnouncementsFeed() {
                 {announcement.title}
               </h2>
               <div className="markdown mt-3">
-                <ReactMarkdown>{announcement.body}</ReactMarkdown>
+                <ReactMarkdown
+                  remarkPlugins={[remarkGfm]}
+                  components={{
+                    a: ({ node, ...props }) => (
+                      <a {...props} target="_blank" rel="noopener noreferrer" />
+                    ),
+                  }}
+                >
+                  {announcement.body}
+                </ReactMarkdown>
               </div>
             </article>
           ))}

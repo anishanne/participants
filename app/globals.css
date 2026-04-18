@@ -105,4 +105,8 @@ textarea {
   .markdown strong {
     @apply font-semibold;
   }
+
+  .markdown a {
+    @apply text-[color:var(--crimson)] underline underline-offset-2 hover:opacity-80;
+  }
 }
