@@ -7,8 +7,8 @@ export const MAP_LOCATIONS: MapLocation[] = [
     shortLabel: "Hewlett",
     description: "Rooms 102, 103, 200, 201",
     area: "Science & Engineering",
-    x: 18,
-    y: 65
+    x: 12,
+    y: 70
   },
   {
     id: "stlc",
@@ -16,8 +16,8 @@ export const MAP_LOCATIONS: MapLocation[] = [
     shortLabel: "STLC",
     description: "Rooms 104, 105, 114, 115, 118, 119",
     area: "Science & Engineering",
-    x: 40,
-    y: 22
+    x: 30,
+    y: 30
   },
   {
     id: "coda",
@@ -26,7 +26,7 @@ export const MAP_LOCATIONS: MapLocation[] = [
     description: "Rooms B60, B80, B90",
     area: "Science & Engineering",
     x: 30,
-    y: 42
+    y: 55
   },
   {
     id: "lathrop",
@@ -34,7 +34,25 @@ export const MAP_LOCATIONS: MapLocation[] = [
     shortLabel: "Bishop",
     description: "Bishop Auditorium",
     area: "East Campus",
-    x: 80,
-    y: 55
+    x: 94,
+    y: 57
+  },
+  {
+    id: "courtyard",
+    name: "Courtyard",
+    shortLabel: "Courtyard",
+    description: "Courtyard (Lunch)",
+    area: "East Campus",
+    x: 43,
+    y: 45
+  },
+  {
+    id: "oval",
+    name: "Stanford Oval",
+    shortLabel: "Oval",
+    description: "Check-in",
+    area: "East Campus (Check-in)",
+    x: 55,
+    y: 62
   },
 ];

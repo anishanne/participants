@@ -1,5 +1,63 @@
-import { parsePST } from "@/lib/config";
+import { isTodayPST, parsePST } from "@/lib/config";
 import type { ScheduleSlot, ScheduleSlotPatch } from "@/lib/types";
+
+export type EventStatus =
+  | { mode: "countdown" }
+  | { mode: "preview"; firstSlot: ScheduleSlot }
+  | { mode: "happening-now"; currentSlot: ScheduleSlot; nextSlot: ScheduleSlot | null }
+  | { mode: "up-next"; nextSlot: ScheduleSlot }
+  | { mode: "finished" };
+
+export function getEventStatus(schedule: ScheduleSlot[], tournamentDate: string): EventStatus {
+  if (!tournamentDate) return { mode: "countdown" };
+
+  const now = new Date();
+
+  if (!isTodayPST(tournamentDate)) {
+    const tDay = parsePST(tournamentDate);
+    if (now < tDay && schedule.length > 0) return { mode: "preview", firstSlot: schedule[0] };
+    if (now > tDay) return { mode: "finished" };
+    return { mode: "countdown" };
+  }
+
+  if (schedule.length === 0) return { mode: "countdown" };
+
+  const slotTimeToday = (startsAt: string): Date => {
+    const original = new Date(startsAt);
+    const todayBase = parsePST(tournamentDate);
+    const pstStr = original.toLocaleString("en-US", {
+      timeZone: "America/Los_Angeles",
+      hour12: false,
+      hour: "2-digit",
+      minute: "2-digit"
+    });
+    const [hours, minutes] = pstStr.split(":").map(Number);
+    todayBase.setHours(hours, minutes, 0, 0);
+    return todayBase;
+  };
+
+  for (let i = 0; i < schedule.length; i++) {
+    const slotStart = slotTimeToday(schedule[i].startsAt);
+    const slotEnd =
+      i + 1 < schedule.length
+        ? slotTimeToday(schedule[i + 1].startsAt)
+        : new Date(slotStart.getTime() + 90 * 60 * 1000);
+
+    if (now >= slotStart && now < slotEnd) {
+      return {
+        mode: "happening-now",
+        currentSlot: schedule[i],
+        nextSlot: i + 1 < schedule.length ? schedule[i + 1] : null
+      };
+    }
+
+    if (now < slotStart) {
+      return { mode: "up-next", nextSlot: schedule[i] };
+    }
+  }
+
+  return { mode: "finished" };
+}
 
 const TOURNAMENT_TIME_ZONE = "America/Los_Angeles";
 

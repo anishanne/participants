@@ -22,7 +22,7 @@ import {
 } from "@/components/app-state-provider";
 import { SkeletonAnnouncementCard, SkeletonEventCard } from "@/components/skeleton";
 import { getBuildingIdFromLocation, isTodayPST, parsePST } from "@/lib/config";
-import type { ScheduleSlot } from "@/lib/types";
+import { getEventStatus, type EventStatus } from "@/lib/schedule";
 import { formatDisplayPhone, formatPhone } from "@/lib/utils";
 
 const quickLinks = [
@@ -59,62 +59,6 @@ function getTimeLeft(targetDate: string) {
     minutes: Math.floor((total / (1000 * 60)) % 60),
     seconds: Math.floor((total / 1000) % 60)
   };
-}
-
-type EventStatus =
-  | { mode: "countdown" }
-  | { mode: "preview"; firstSlot: ScheduleSlot }
-  | { mode: "happening-now"; currentSlot: ScheduleSlot; nextSlot: ScheduleSlot | null }
-  | { mode: "up-next"; nextSlot: ScheduleSlot }
-  | { mode: "finished" };
-
-function getEventStatus(schedule: ScheduleSlot[], tournamentDate: string): EventStatus {
-  if (!tournamentDate) return { mode: "countdown" as const };
-
-  const now = new Date();
-
-  if (!isTodayPST(tournamentDate)) {
-    const tDay = parsePST(tournamentDate);
-    if (now < tDay && schedule.length > 0) return { mode: "preview", firstSlot: schedule[0] };
-    if (now > tDay) return { mode: "finished" };
-    return { mode: "countdown" };
-  }
-
-  // Tournament day — find current/next
-  // Slot startsAt may be from a different date (DB has the real tournament date).
-  // Extract the time-of-day and combine with today's date for comparison.
-  if (schedule.length === 0) return { mode: "countdown" };
-
-  function slotTimeToday(startsAt: string): Date {
-    const original = new Date(startsAt);
-    const todayBase = parsePST(tournamentDate);
-    // Get hours/minutes in PST from the original timestamp
-    const pstStr = original.toLocaleString("en-US", { timeZone: "America/Los_Angeles", hour12: false, hour: "2-digit", minute: "2-digit" });
-    const [hours, minutes] = pstStr.split(":").map(Number);
-    todayBase.setHours(hours, minutes, 0, 0);
-    return todayBase;
-  }
-
-  for (let i = 0; i < schedule.length; i++) {
-    const slotStart = slotTimeToday(schedule[i].startsAt);
-    const slotEnd = i + 1 < schedule.length
-      ? slotTimeToday(schedule[i + 1].startsAt)
-      : new Date(slotStart.getTime() + 90 * 60 * 1000);
-
-    if (now >= slotStart && now < slotEnd) {
-      return {
-        mode: "happening-now",
-        currentSlot: schedule[i],
-        nextSlot: i + 1 < schedule.length ? schedule[i + 1] : null
-      };
-    }
-
-    if (now < slotStart) {
-      return { mode: "up-next", nextSlot: schedule[i] };
-    }
-  }
-
-  return { mode: "finished" };
 }
 
 /* ---------- Main component ---------- */

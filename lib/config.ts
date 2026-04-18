@@ -28,6 +28,10 @@ const BUILDING_IDS: Record<string, string> = {
   stlc: "stlc",
   coda: "coda",
   lathrop: "lathrop",
+  bishop: "lathrop",
+  courtyard: "courtyard",
+  oval: "oval",
+  stanford: "oval",
 };
 
 /** Extract building ID from a location string like "Hewlett 200" → "hewlett" */
