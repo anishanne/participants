@@ -1,9 +1,7 @@
 # Tournament HQ
-
 Mobile-first participant web app with a bottom navbar, personalized schedules, announcement delivery controls, interactive venue map, and an admin dashboard for schedule and messaging ops.
 
 ## Stack
-
 - Next.js App Router
 - Tailwind CSS
 - Supabase-backed API routes
